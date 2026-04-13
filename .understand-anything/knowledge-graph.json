@@ -1,0 +1,1169 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "Smartlearners.ai CRM",
+    "languages": ["TypeScript", "Python", "CSS"],
+    "frameworks": ["React", "FastAPI", "SQLAlchemy", "Tailwind CSS", "Google Gemini AI"],
+    "description": "Student engagement CRM with React/TypeScript frontend and FastAPI/Python backend with AI chatbot. Provides role-based dashboards (Teacher, School Admin, OrcaLex Admin) for monitoring student engagement, sending WhatsApp alerts, generating AI-powered MCQ challenges, and tracking activity feeds.",
+    "analyzedAt": "2026-03-23T00:00:00.000Z",
+    "gitCommitHash": "83545c49ca9c431bc7624aec91b55686cb3d1181"
+  },
+  "nodes": [
+    {
+      "id": "file:src/index.tsx",
+      "type": "file",
+      "path": "src/index.tsx",
+      "language": "TypeScript",
+      "summary": "React application entry point. Renders the App component inside React.StrictMode and attaches it to the DOM root element.",
+      "imports": ["react", "react-dom/client", "./index.css", "./App", "./reportWebVitals"],
+      "exports": []
+    },
+    {
+      "id": "file:src/App.tsx",
+      "type": "file",
+      "path": "src/App.tsx",
+      "language": "TypeScript",
+      "summary": "Root application component that sets up routing with react-router-dom. Defines ProtectedRoute for role-based access, DashboardLayout with navigation header and ChatBot, and AppRoutes mapping /teacher, /school, /orcalex paths to respective dashboards.",
+      "imports": ["react", "react-router-dom", "./context/AuthContext", "./context/DashboardContext", "./types", "./pages/LoginPage", "./pages/TeacherDashboard", "./pages/SchoolDashboard", "./pages/OrcaLexDashboard", "./components/ChatBot"],
+      "exports": ["default:App"]
+    },
+    {
+      "id": "file:src/types/index.ts",
+      "type": "file",
+      "path": "src/types/index.ts",
+      "language": "TypeScript",
+      "summary": "Central type definitions file. Defines enums (UserRole, EngagementStatus, NotificationType) and interfaces for all data models: User, School, StudentProfile, StudentEngagementSummary, EngagementAlert, dashboard data types, activity types, and MCQ challenge types.",
+      "imports": [],
+      "exports": ["UserRole", "EngagementStatus", "NotificationType", "User", "School", "StudentProfile", "StudentEngagementSummary", "EngagementAlert", "SendAlertRequest", "BulkSendAlertRequest", "AlertResult", "TeacherDashboardData", "SchoolDashboardData", "OrcaLexSchoolSummary", "OrcaLexDashboardData", "ActivityEntry", "DailyActivitySummary", "ActivityOverview", "UserActivityTimeline", "MCQOption", "MCQQuestion", "GeneratePreviewRequest", "GeneratePreviewResponse"]
+    },
+    {
+      "id": "file:src/context/AuthContext.tsx",
+      "type": "file",
+      "path": "src/context/AuthContext.tsx",
+      "language": "TypeScript",
+      "summary": "Authentication context provider. Manages user state with localStorage persistence, provides login (creates mock user by role) and logout functions, and exposes isAuthenticated status via React context.",
+      "imports": ["react", "../types"],
+      "exports": ["useAuth", "AuthProvider"]
+    },
+    {
+      "id": "file:src/context/DashboardContext.tsx",
+      "type": "file",
+      "path": "src/context/DashboardContext.tsx",
+      "language": "TypeScript",
+      "summary": "Dashboard data context provider. Shares dashboard data between components (e.g., between dashboard pages and the ChatBot) via React context.",
+      "imports": ["react"],
+      "exports": ["useDashboard", "DashboardProvider"]
+    },
+    {
+      "id": "file:src/services/api.ts",
+      "type": "file",
+      "path": "src/services/api.ts",
+      "language": "TypeScript",
+      "summary": "API client layer using axios. Defines two axios instances (remote API at crmapi.smartlearners.ai and local at localhost:8000). Exports dashboardAPI, engagementAPI, alertAPI, activityAPI, challengeAPI, chatAPI, and healthAPI service objects mapping frontend calls to backend REST endpoints.",
+      "imports": ["axios", "../types"],
+      "exports": ["dashboardAPI", "engagementAPI", "alertAPI", "activityAPI", "challengeAPI", "chatAPI", "healthAPI", "default:api"]
+    },
+    {
+      "id": "file:src/pages/LoginPage.tsx",
+      "type": "file",
+      "path": "src/pages/LoginPage.tsx",
+      "language": "TypeScript",
+      "summary": "Login page component with role selector (Teacher, School Admin, OrcaLex Admin). Teachers enter username, School Admins enter school code, OrcaLex Admins login without credentials. Routes to appropriate dashboard after login.",
+      "imports": ["react", "../context/AuthContext", "../types", "react-router-dom"],
+      "exports": ["default:LoginPage"]
+    },
+    {
+      "id": "file:src/pages/TeacherDashboard.tsx",
+      "type": "file",
+      "path": "src/pages/TeacherDashboard.tsx",
+      "language": "TypeScript",
+      "summary": "Teacher dashboard page. Loads dashboard data by teacher username, displays MetricsCards, TeacherAnalytics charts, recent alerts, and a StudentTable with filtering by days since login. Supports sending alerts, challenges, viewing student details, and bulk alert operations.",
+      "imports": ["react", "../services/api", "../types", "../context/AuthContext", "../context/DashboardContext", "../components/MetricsCards", "../components/StudentTable", "../components/SendAlertModal", "../components/SendChallengeModal", "../components/StudentDetailModal", "../components/AnalyticsSections"],
+      "exports": ["default:TeacherDashboard"]
+    },
+    {
+      "id": "file:src/pages/SchoolDashboard.tsx",
+      "type": "file",
+      "path": "src/pages/SchoolDashboard.tsx",
+      "language": "TypeScript",
+      "summary": "School admin dashboard page. Loads school data by school code, displays MetricsCards, SchoolAnalytics, engagement overview with progress bars, platform health stats, and tabbed views for students/teachers/activity with day filtering and bulk alerts.",
+      "imports": ["react", "../services/api", "../types", "../context/AuthContext", "../context/DashboardContext", "../components/MetricsCards", "../components/StudentTable", "../components/SendAlertModal", "../components/ActivityFeed", "../components/StudentDetailModal", "../components/AnalyticsSections"],
+      "exports": ["default:SchoolDashboard"]
+    },
+    {
+      "id": "file:src/pages/OrcaLexDashboard.tsx",
+      "type": "file",
+      "path": "src/pages/OrcaLexDashboard.tsx",
+      "language": "TypeScript",
+      "summary": "OrcaLex (platform) admin dashboard. Shows platform-wide metrics across all schools, AdminAnalytics charts with school leaderboard and donut charts, school summary table, and tabbed student/teacher/activity views with day filtering.",
+      "imports": ["react", "../context/DashboardContext", "../services/api", "../types", "../components/StudentTable", "../components/ActivityFeed", "../components/AnalyticsSections"],
+      "exports": ["default:OrcaLexDashboard"]
+    },
+    {
+      "id": "file:src/components/ChatBot.tsx",
+      "type": "file",
+      "path": "src/components/ChatBot.tsx",
+      "language": "TypeScript",
+      "summary": "Floating AI chatbot component. Sends user messages to the backend chat API along with trimmed dashboard data context. Displays role-specific quick suggestions and adapts accent colors by user role.",
+      "imports": ["react", "../services/api", "../context/AuthContext", "../context/DashboardContext"],
+      "exports": ["default:ChatBot"]
+    },
+    {
+      "id": "file:src/components/StudentTable.tsx",
+      "type": "file",
+      "path": "src/components/StudentTable.tsx",
+      "language": "TypeScript",
+      "summary": "Reusable student/teacher table component with engagement status badges, filter by status (all/at-risk/inactive), sort by name/lastLogin/sessions, checkbox selection for bulk operations, and action buttons (View, Alert, Challenge).",
+      "imports": ["react", "../types"],
+      "exports": ["default:StudentTable"]
+    },
+    {
+      "id": "file:src/components/MetricsCards.tsx",
+      "type": "file",
+      "path": "src/components/MetricsCards.tsx",
+      "language": "TypeScript",
+      "summary": "Dashboard metrics card grid component. Displays 5 metric cards (Total Students, Active Students, Active Sessions, At-Risk, Inactive) with animated SVG icons, accent colors, and hover effects.",
+      "imports": ["react"],
+      "exports": ["default:MetricsCards"]
+    },
+    {
+      "id": "file:src/components/SendAlertModal.tsx",
+      "type": "file",
+      "path": "src/components/SendAlertModal.tsx",
+      "language": "TypeScript",
+      "summary": "Modal dialog for sending WhatsApp alerts to individual students. Displays student name, confirmation message, and handles the send operation with loading/error states.",
+      "imports": ["react"],
+      "exports": ["default:SendAlertModal"]
+    },
+    {
+      "id": "file:src/components/SendChallengeModal.tsx",
+      "type": "file",
+      "path": "src/components/SendChallengeModal.tsx",
+      "language": "TypeScript",
+      "summary": "Multi-step modal for creating and previewing AI-generated MCQ challenges. Step 1: select subject, topic, question count. Step 2: loading with skeleton. Step 3: preview questions with KaTeX math rendering, then send or regenerate.",
+      "imports": ["react", "../services/api", "../types", "./KaTeXText"],
+      "exports": ["default:SendChallengeModal"]
+    },
+    {
+      "id": "file:src/components/StudentDetailModal.tsx",
+      "type": "file",
+      "path": "src/components/StudentDetailModal.tsx",
+      "language": "TypeScript",
+      "summary": "Modal for viewing detailed student profile including engagement status, login stats, session counts, gap analysis scores table, and exam results table. Fetches data from the student-summary API endpoint.",
+      "imports": ["react", "../services/api", "../types"],
+      "exports": ["default:StudentDetailModal"]
+    },
+    {
+      "id": "file:src/components/ActivityFeed.tsx",
+      "type": "file",
+      "path": "src/components/ActivityFeed.tsx",
+      "language": "TypeScript",
+      "summary": "Activity feed component displaying daily activity breakdowns in expandable day sections. Shows summary cards for practice, homework, exams, classwork counts. Supports filtering by role (student/teacher) and text search.",
+      "imports": ["react", "../types"],
+      "exports": ["default:ActivityFeed"]
+    },
+    {
+      "id": "file:src/components/AnalyticsCharts.tsx",
+      "type": "file",
+      "path": "src/components/AnalyticsCharts.tsx",
+      "language": "TypeScript",
+      "summary": "Pure SVG chart library with BarChart, GroupedBarChart, LineChart (with smooth Catmull-Rom curves), and DAUWAUMAUCards components. Features hover tooltips, animated bars/lines, and responsive SVG viewBox rendering.",
+      "imports": ["react"],
+      "exports": ["BarChart", "GroupedBarChart", "LineChart", "DAUWAUMAUCards"]
+    },
+    {
+      "id": "file:src/components/AnalyticsSections.tsx",
+      "type": "file",
+      "path": "src/components/AnalyticsSections.tsx",
+      "language": "TypeScript",
+      "summary": "Analytics section wrappers for each dashboard role. TeacherAnalytics shows status bars and engagement trend. SchoolAnalytics adds class-wise grouped bars and section engagement. AdminAnalytics adds school-wise donut charts and leaderboard table.",
+      "imports": ["react", "./AnalyticsCharts", "../types"],
+      "exports": ["TeacherAnalytics", "SchoolAnalytics", "AdminAnalytics"]
+    },
+    {
+      "id": "file:src/components/KaTeXText.tsx",
+      "type": "file",
+      "path": "src/components/KaTeXText.tsx",
+      "language": "TypeScript",
+      "summary": "LaTeX math rendering component using KaTeX library. Parses text for inline ($...$) and display ($$...$$) math delimiters, renders to HTML with throwOnError:false for graceful fallback.",
+      "imports": ["react", "katex", "katex/dist/katex.min.css"],
+      "exports": ["default:KaTeXText"]
+    },
+    {
+      "id": "file:src/index.css",
+      "type": "file",
+      "path": "src/index.css",
+      "language": "CSS",
+      "summary": "Global CSS file with Tailwind directives, base typography using Plus Jakarta Sans, custom scrollbar styling, glass-panel component class, and keyframe animations (gradient-shift, float, glow-pulse, dot-pulse, entrance-stagger).",
+      "imports": ["tailwindcss"],
+      "exports": []
+    },
+    {
+      "id": "file:src/App.css",
+      "type": "file",
+      "path": "src/App.css",
+      "language": "CSS",
+      "summary": "Default Create React App CSS styles. Contains basic App layout classes (mostly unused in the current app which uses inline styles).",
+      "imports": [],
+      "exports": []
+    },
+    {
+      "id": "file:backend/main.py",
+      "type": "file",
+      "path": "backend/main.py",
+      "language": "Python",
+      "summary": "FastAPI application entry point. Configures CORS, registers all API routers (dashboard, engagement, challenge, activity, alert, intervention, chat), manages lifespan events for DB table creation and scheduler start/stop.",
+      "imports": ["fastapi", "fastapi.middleware.cors", "cache", "database", "routers.dashboard", "routers.engagement", "routers.challenge", "routers.activity", "routers.alert", "routers.intervention", "routers.chat", "scheduler"],
+      "exports": ["app"]
+    },
+    {
+      "id": "file:backend/config.py",
+      "type": "file",
+      "path": "backend/config.py",
+      "language": "Python",
+      "summary": "Environment configuration loader. Reads DATABASE_URL, INTERAKT_API_KEY, GEMINI_API_KEY, and AI_MODEL from .env file using dotenv.",
+      "imports": ["os", "dotenv"],
+      "exports": ["DATABASE_URL", "INTERAKT_API_KEY", "GEMINI_API_KEY", "AI_MODEL"]
+    },
+    {
+      "id": "file:backend/database.py",
+      "type": "file",
+      "path": "backend/database.py",
+      "language": "Python",
+      "summary": "SQLAlchemy database setup. Creates engine from DATABASE_URL, configures SessionLocal factory, defines Base for ORM models, and provides get_db dependency for FastAPI route injection.",
+      "imports": ["sqlalchemy", "config"],
+      "exports": ["engine", "SessionLocal", "Base", "get_db"]
+    },
+    {
+      "id": "file:backend/cache.py",
+      "type": "file",
+      "path": "backend/cache.py",
+      "language": "Python",
+      "summary": "Simple thread-safe in-memory TTL cache (30-minute default). Provides get, put, and invalidate operations for caching API responses to reduce database load.",
+      "imports": ["time", "threading"],
+      "exports": ["get", "put", "invalidate", "CACHE_TTL_SECONDS"]
+    },
+    {
+      "id": "file:backend/scheduler.py",
+      "type": "file",
+      "path": "backend/scheduler.py",
+      "language": "Python",
+      "summary": "APScheduler-based daily cron job for automated student interventions. Runs at 8:00 AM IST using PostgreSQL advisory locks to prevent duplicate execution across Gunicorn workers.",
+      "imports": ["apscheduler", "sqlalchemy", "database", "services.intervention_service"],
+      "exports": ["start_scheduler", "stop_scheduler"]
+    },
+    {
+      "id": "file:backend/models/django_tables.py",
+      "type": "file",
+      "path": "backend/models/django_tables.py",
+      "language": "Python",
+      "summary": "SQLAlchemy ORM model definitions mirroring existing Django database tables (read-only) plus CRM-owned tables. Defines School, Classes, Section, Student, Subject, GapAnalysis, Exam, StudentResult, SubjectTeacherMapping, OutstandingToken, BlacklistedToken, Homework, HomeworkSubmission, ClassworkSubmission, and InterventionLog.",
+      "imports": ["sqlalchemy", "database"],
+      "exports": ["School", "Classes", "Section", "Student", "Subject", "GapAnalysis", "Exam", "StudentResult", "SubjectTeacherMapping", "OutstandingToken", "BlacklistedToken", "Homework", "HomeworkSubmission", "ClassworkSubmission", "InterventionLog"]
+    },
+    {
+      "id": "file:backend/routers/dashboard.py",
+      "type": "file",
+      "path": "backend/routers/dashboard.py",
+      "language": "Python",
+      "summary": "Dashboard API router (/api/dashboard). Provides endpoints for teacher dashboard by username/school_id, school dashboard by code/id, OrcaLex admin dashboard aggregating all schools, and individual student summary with gap analysis and exam results.",
+      "imports": ["fastapi", "sqlalchemy", "cache", "database", "models.django_tables", "schemas.dashboard", "schemas.engagement", "services.engagement_service"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/routers/engagement.py",
+      "type": "file",
+      "path": "backend/routers/engagement.py",
+      "language": "Python",
+      "summary": "Engagement API router (/api/engagement). Provides endpoints for detecting at-risk students by school or teacher, listing alerts, resolving alerts, and getting individual student engagement status.",
+      "imports": ["fastapi", "sqlalchemy", "cache", "database", "models.django_tables", "schemas.engagement", "services.engagement_service"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/routers/alert.py",
+      "type": "file",
+      "path": "backend/routers/alert.py",
+      "language": "Python",
+      "summary": "Alert API router (/api/alerts). Provides endpoints for sending individual and bulk WhatsApp alerts to students by looking up phone numbers and calling the WhatsApp service.",
+      "imports": ["fastapi", "sqlalchemy", "pydantic", "database", "models.django_tables", "services.whatsapp_service"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/routers/activity.py",
+      "type": "file",
+      "path": "backend/routers/activity.py",
+      "language": "Python",
+      "summary": "Activity API router (/api/activity). Provides endpoints for school activity overview (daily breakdown), individual student activity timeline, and teacher activity timeline with configurable day ranges.",
+      "imports": ["fastapi", "sqlalchemy", "cache", "database", "schemas.activity", "services.activity_service", "models.django_tables"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/routers/challenge.py",
+      "type": "file",
+      "path": "backend/routers/challenge.py",
+      "language": "Python",
+      "summary": "Challenge API router (/api/challenges). Provides endpoints for generating AI-powered MCQ preview questions via Gemini, sending manual/bulk challenges, listing student challenges, and marking challenges complete.",
+      "imports": ["fastapi", "schemas.challenge", "services.ai_service"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/routers/chat.py",
+      "type": "file",
+      "path": "backend/routers/chat.py",
+      "language": "Python",
+      "summary": "Chat API router (/api/chat). Single POST endpoint that receives natural-language messages with user role/context and delegates to the chat service for AI-powered CRM-aware responses.",
+      "imports": ["fastapi", "pydantic", "database", "services.chat_service"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/routers/intervention.py",
+      "type": "file",
+      "path": "backend/routers/intervention.py",
+      "language": "Python",
+      "summary": "Intervention API router (/api/interventions). Single endpoint to manually trigger the intervention check that sends alerts and challenges to inactive students.",
+      "imports": ["fastapi", "database", "services.intervention_service"],
+      "exports": ["router"]
+    },
+    {
+      "id": "file:backend/schemas/dashboard.py",
+      "type": "file",
+      "path": "backend/schemas/dashboard.py",
+      "language": "Python",
+      "summary": "Pydantic schemas for dashboard API responses. Defines TeacherDashboardData, SchoolDashboardData, OrcaLexSchoolSummary, and OrcaLexDashboardData models with engagement metrics and student/teacher lists.",
+      "imports": ["pydantic", "schemas.engagement"],
+      "exports": ["TeacherDashboardData", "SchoolDashboardData", "OrcaLexSchoolSummary", "OrcaLexDashboardData"]
+    },
+    {
+      "id": "file:backend/schemas/engagement.py",
+      "type": "file",
+      "path": "backend/schemas/engagement.py",
+      "language": "Python",
+      "summary": "Pydantic schemas for engagement data. Defines EngagementStatus enum, StudentEngagementSummary with login/session/status fields, and EngagementAlert model.",
+      "imports": ["pydantic", "enum"],
+      "exports": ["EngagementStatus", "StudentEngagementSummary", "EngagementAlert"]
+    },
+    {
+      "id": "file:backend/schemas/activity.py",
+      "type": "file",
+      "path": "backend/schemas/activity.py",
+      "language": "Python",
+      "summary": "Pydantic schemas for activity tracking. Defines ActivityEntry, DailyActivitySummary, UserActivityTimeline, and ActivityOverview models for the activity feed system.",
+      "imports": ["pydantic"],
+      "exports": ["ActivityEntry", "DailyActivitySummary", "UserActivityTimeline", "ActivityOverview"]
+    },
+    {
+      "id": "file:backend/schemas/challenge.py",
+      "type": "file",
+      "path": "backend/schemas/challenge.py",
+      "language": "Python",
+      "summary": "Pydantic schemas for the MCQ challenge system. Defines request/response models for sending, generating preview, and completing challenges with MCQQuestion and MCQOption models.",
+      "imports": ["pydantic"],
+      "exports": ["SendChallengeRequest", "BulkSendChallengeRequest", "CompleteChallengeRequest", "MCQChallenge", "GeneratePreviewRequest", "GeneratePreviewResponse", "MCQOption", "MCQQuestion"]
+    },
+    {
+      "id": "file:backend/services/engagement_service.py",
+      "type": "file",
+      "path": "backend/services/engagement_service.py",
+      "language": "Python",
+      "summary": "Core engagement calculation service. Computes student engagement status based on last_login days and session counts from JWT tokens. Provides functions for all student/teacher engagement queries, section-based teacher lookups, Google auth user handling, and alert generation.",
+      "imports": ["datetime", "sqlalchemy", "models.django_tables", "schemas.engagement"],
+      "exports": ["get_all_student_engagements", "get_all_teacher_engagements", "get_teacher_section_students", "get_google_auth_users", "generate_alerts", "count_sessions_for_school", "calculate_student_engagement", "_week_start", "_last_week_start"]
+    },
+    {
+      "id": "file:backend/services/chat_service.py",
+      "type": "file",
+      "path": "backend/services/chat_service.py",
+      "language": "Python",
+      "summary": "AI chat service using Google Gemini. Classifies user intent via keyword matching, fetches relevant CRM data from internal API endpoints, then generates conversational responses using the Gemini model with dashboard context.",
+      "imports": ["json", "requests", "sqlalchemy", "config", "google.genai"],
+      "exports": ["process_chat_message"]
+    },
+    {
+      "id": "file:backend/services/ai_service.py",
+      "type": "file",
+      "path": "backend/services/ai_service.py",
+      "language": "Python",
+      "summary": "AI service for generating MCQ questions using Google Gemini. Handles JSON backslash escaping for LaTeX math expressions, implements retry logic, and parses AI-generated question content.",
+      "imports": ["json", "re", "google.genai", "config", "services.prompts"],
+      "exports": ["generate_mcq_questions"]
+    },
+    {
+      "id": "file:backend/services/whatsapp_service.py",
+      "type": "file",
+      "path": "backend/services/whatsapp_service.py",
+      "language": "Python",
+      "summary": "WhatsApp messaging service via Interakt API. Sends template-based WhatsApp messages to students using their phone numbers. Handles phone number normalization for Indian mobile numbers.",
+      "imports": ["os", "json", "requests"],
+      "exports": ["send_whatsapp_message", "send_inactive_message"]
+    },
+    {
+      "id": "file:backend/services/activity_service.py",
+      "type": "file",
+      "path": "backend/services/activity_service.py",
+      "language": "Python",
+      "summary": "Activity tracking service. Queries GapAnalysis, HomeworkSubmission, Exam, ClassworkSubmission, and StudentResult tables to build student and teacher activity feeds with daily breakdowns.",
+      "imports": ["datetime", "sqlalchemy", "models.django_tables", "schemas.activity"],
+      "exports": ["get_daily_activity_for_school", "get_student_activity_entries", "get_teacher_activity_entries"]
+    },
+    {
+      "id": "file:backend/services/intervention_service.py",
+      "type": "file",
+      "path": "backend/services/intervention_service.py",
+      "language": "Python",
+      "summary": "Automated intervention service. Sends WhatsApp alerts and MCQ challenge notifications to students at day 3, 7, and 14 inactivity milestones. Tracks sent interventions to prevent duplicates and resets when students log back in.",
+      "imports": ["sqlalchemy", "models.django_tables", "services.whatsapp_service", "services.testprep_service"],
+      "exports": ["run_intervention_check"]
+    },
+    {
+      "id": "file:backend/services/testprep_service.py",
+      "type": "file",
+      "path": "backend/services/testprep_service.py",
+      "language": "Python",
+      "summary": "Test Prep API client. Calls quizmode.smartlearners.ai to generate MCQ challenges for inactive students by resolving class/subject, fetching available chapters, and generating questions.",
+      "imports": ["requests", "sqlalchemy", "models.django_tables"],
+      "exports": ["generate_challenge_for_student"]
+    },
+    {
+      "id": "file:backend/services/prompts.py",
+      "type": "file",
+      "path": "backend/services/prompts.py",
+      "language": "Python",
+      "summary": "Centralized AI prompt templates. Contains MCQ system role instruction, JSON schema template, and requirements for generating CBSE/ICSE-aligned HOT questions with LaTeX math formatting rules.",
+      "imports": [],
+      "exports": ["MCQ_SYSTEM_ROLE", "MCQ_JSON_SCHEMA", "MCQ_REQUIREMENTS", "build_mcq_prompt"]
+    },
+    {
+      "id": "file:tailwind.config.js",
+      "type": "file",
+      "path": "tailwind.config.js",
+      "language": "JavaScript",
+      "summary": "Tailwind CSS configuration. Extends theme with custom brand/surface/ink color palettes, Plus Jakarta Sans and Source Serif 4 fonts, custom border radii, box shadows, and keyframe animations.",
+      "imports": [],
+      "exports": ["module.exports"]
+    },
+    {
+      "id": "file:tsconfig.json",
+      "type": "file",
+      "path": "tsconfig.json",
+      "language": "JSON",
+      "summary": "TypeScript compiler configuration targeting ES5 with strict mode, ESNext modules, React JSX transform, and DOM/ESNext library support.",
+      "imports": [],
+      "exports": []
+    },
+    {
+      "id": "func:src/App.tsx:ProtectedRoute",
+      "type": "function",
+      "name": "ProtectedRoute",
+      "file": "src/App.tsx",
+      "line": 13,
+      "params": ["children", "requiredRole"],
+      "summary": "Route wrapper that redirects unauthenticated users to /login and unauthorized users to their role-appropriate dashboard."
+    },
+    {
+      "id": "func:src/App.tsx:DashboardLayout",
+      "type": "function",
+      "name": "DashboardLayout",
+      "file": "src/App.tsx",
+      "line": 37,
+      "params": ["children"],
+      "summary": "Layout component with sticky navigation bar showing brand, user info, role badge, and logout button. Includes ChatBot at the bottom."
+    },
+    {
+      "id": "func:src/App.tsx:AppRoutes",
+      "type": "function",
+      "name": "AppRoutes",
+      "file": "src/App.tsx",
+      "line": 191,
+      "params": [],
+      "summary": "Defines all application routes: /login, /teacher, /school, /orcalex, and root redirect logic based on authentication and role."
+    },
+    {
+      "id": "func:src/App.tsx:App",
+      "type": "function",
+      "name": "App",
+      "file": "src/App.tsx",
+      "line": 253,
+      "params": [],
+      "summary": "Root component wrapping AuthProvider, DashboardProvider, and BrowserRouter around AppRoutes."
+    },
+    {
+      "id": "func:src/context/AuthContext.tsx:useAuth",
+      "type": "function",
+      "name": "useAuth",
+      "file": "src/context/AuthContext.tsx",
+      "line": 13,
+      "params": [],
+      "summary": "Custom hook to access authentication context (user, login, logout, isAuthenticated)."
+    },
+    {
+      "id": "func:src/context/AuthContext.tsx:AuthProvider",
+      "type": "function",
+      "name": "AuthProvider",
+      "file": "src/context/AuthContext.tsx",
+      "line": 21,
+      "params": ["children"],
+      "summary": "Context provider managing user state with localStorage persistence and mock user creation on login."
+    },
+    {
+      "id": "func:src/context/DashboardContext.tsx:useDashboard",
+      "type": "function",
+      "name": "useDashboard",
+      "file": "src/context/DashboardContext.tsx",
+      "line": 13,
+      "params": [],
+      "summary": "Hook to access shared dashboard data context."
+    },
+    {
+      "id": "func:src/pages/TeacherDashboard.tsx:TeacherDashboard",
+      "type": "function",
+      "name": "TeacherDashboard",
+      "file": "src/pages/TeacherDashboard.tsx",
+      "line": 15,
+      "params": [],
+      "summary": "Teacher dashboard component with data loading, at-risk detection, alert/challenge sending, student table with filtering."
+    },
+    {
+      "id": "func:src/pages/SchoolDashboard.tsx:SchoolDashboard",
+      "type": "function",
+      "name": "SchoolDashboard",
+      "file": "src/pages/SchoolDashboard.tsx",
+      "line": 16,
+      "params": [],
+      "summary": "School admin dashboard with school-wide metrics, student/teacher tabs, activity feed, and bulk alert support."
+    },
+    {
+      "id": "func:src/pages/OrcaLexDashboard.tsx:OrcaLexDashboard",
+      "type": "function",
+      "name": "OrcaLexDashboard",
+      "file": "src/pages/OrcaLexDashboard.tsx",
+      "line": 12,
+      "params": [],
+      "summary": "Platform admin dashboard showing cross-school metrics, school table, and aggregated student/teacher views."
+    },
+    {
+      "id": "func:src/components/ChatBot.tsx:ChatBot",
+      "type": "function",
+      "name": "ChatBot",
+      "file": "src/components/ChatBot.tsx",
+      "line": 34,
+      "params": [],
+      "summary": "Floating chatbot with message history, role-specific suggestions, and Gemini AI-powered responses."
+    },
+    {
+      "id": "func:src/components/StudentTable.tsx:StudentTable",
+      "type": "function",
+      "name": "StudentTable",
+      "file": "src/components/StudentTable.tsx",
+      "line": 15,
+      "params": ["students", "onSendAlert", "onSendChallenge", "onViewDetails", "selectedIds", "onSelectionChange"],
+      "summary": "Reusable data table for student/teacher listings with filtering, sorting, selection, and action buttons."
+    },
+    {
+      "id": "func:src/components/MetricsCards.tsx:MetricsCards",
+      "type": "function",
+      "name": "MetricsCards",
+      "file": "src/components/MetricsCards.tsx",
+      "line": 122,
+      "params": ["totalStudents", "activeStudents", "activeSessions", "atRiskStudents", "inactiveStudents"],
+      "summary": "Grid of 5 metric cards showing key engagement KPIs with icons and engagement rate calculation."
+    },
+    {
+      "id": "func:src/components/AnalyticsCharts.tsx:BarChart",
+      "type": "function",
+      "name": "BarChart",
+      "file": "src/components/AnalyticsCharts.tsx",
+      "line": 100,
+      "params": ["data", "title", "height", "showValues"],
+      "summary": "SVG bar chart with animated bars, hover tooltips, and Y-axis grid."
+    },
+    {
+      "id": "func:src/components/AnalyticsCharts.tsx:GroupedBarChart",
+      "type": "function",
+      "name": "GroupedBarChart",
+      "file": "src/components/AnalyticsCharts.tsx",
+      "line": 286,
+      "params": ["data", "title", "legend1", "legend2", "color1", "color2"],
+      "summary": "SVG grouped bar chart comparing two values per category with legends and angled labels."
+    },
+    {
+      "id": "func:src/components/AnalyticsCharts.tsx:LineChart",
+      "type": "function",
+      "name": "LineChart",
+      "file": "src/components/AnalyticsCharts.tsx",
+      "line": 450,
+      "params": ["data", "title", "color", "height"],
+      "summary": "SVG line chart with smooth Catmull-Rom bezier curves, gradient area fill, and animated line drawing."
+    },
+    {
+      "id": "func:src/components/AnalyticsCharts.tsx:DAUWAUMAUCards",
+      "type": "function",
+      "name": "DAUWAUMAUCards",
+      "file": "src/components/AnalyticsCharts.tsx",
+      "line": 626,
+      "params": ["students", "totalStudents"],
+      "summary": "Daily/Weekly/Monthly Active User metric cards with progress bars."
+    },
+    {
+      "id": "func:src/components/AnalyticsSections.tsx:TeacherAnalytics",
+      "type": "function",
+      "name": "TeacherAnalytics",
+      "file": "src/components/AnalyticsSections.tsx",
+      "line": 77,
+      "params": ["students"],
+      "summary": "Teacher-level analytics section with DAU/WAU/MAU, status bar chart, and engagement trend line."
+    },
+    {
+      "id": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics",
+      "type": "function",
+      "name": "SchoolAnalytics",
+      "file": "src/components/AnalyticsSections.tsx",
+      "line": 124,
+      "params": ["students", "schoolName"],
+      "summary": "School-level analytics with class-wise grouped bars, section engagement, trend line, and avg sessions by class."
+    },
+    {
+      "id": "func:src/components/AnalyticsSections.tsx:AdminAnalytics",
+      "type": "function",
+      "name": "AdminAnalytics",
+      "file": "src/components/AnalyticsSections.tsx",
+      "line": 469,
+      "params": ["schools", "allStudents"],
+      "summary": "Platform admin analytics with DAU/WAU/MAU, school-wise donut charts, and school leaderboard table."
+    },
+    {
+      "id": "func:src/components/KaTeXText.tsx:KaTeXText",
+      "type": "function",
+      "name": "KaTeXText",
+      "file": "src/components/KaTeXText.tsx",
+      "line": 21,
+      "params": ["text", "className"],
+      "summary": "Renders mixed text/LaTeX content using KaTeX with inline and display math support."
+    },
+    {
+      "id": "func:src/components/ActivityFeed.tsx:ActivityFeed",
+      "type": "function",
+      "name": "ActivityFeed",
+      "file": "src/components/ActivityFeed.tsx",
+      "line": 123,
+      "params": ["data"],
+      "summary": "Activity feed with summary cards, role filter, text search, and expandable daily sections."
+    },
+    {
+      "id": "func:backend/main.py:lifespan",
+      "type": "function",
+      "name": "lifespan",
+      "file": "backend/main.py",
+      "line": 21,
+      "params": ["app"],
+      "summary": "FastAPI lifespan context manager handling DB table creation and scheduler start/stop."
+    },
+    {
+      "id": "func:backend/main.py:root",
+      "type": "function",
+      "name": "root",
+      "file": "backend/main.py",
+      "line": 59,
+      "params": [],
+      "summary": "Health check endpoint returning service status."
+    },
+    {
+      "id": "func:backend/database.py:get_db",
+      "type": "function",
+      "name": "get_db",
+      "file": "backend/database.py",
+      "line": 10,
+      "params": [],
+      "summary": "FastAPI dependency providing a SQLAlchemy database session with automatic cleanup."
+    },
+    {
+      "id": "func:backend/cache.py:get",
+      "type": "function",
+      "name": "get",
+      "file": "backend/cache.py",
+      "line": 15,
+      "params": ["key"],
+      "summary": "Returns cached value if not expired, else None."
+    },
+    {
+      "id": "func:backend/cache.py:put",
+      "type": "function",
+      "name": "put",
+      "file": "backend/cache.py",
+      "line": 28,
+      "params": ["key", "value"],
+      "summary": "Stores a value in cache with 30-minute TTL."
+    },
+    {
+      "id": "func:backend/routers/dashboard.py:get_teacher_dashboard_by_username",
+      "type": "function",
+      "name": "get_teacher_dashboard_by_username",
+      "file": "backend/routers/dashboard.py",
+      "line": 38,
+      "params": ["username", "db"],
+      "summary": "GET /api/dashboard/teacher/by-username/{username} - Returns teacher dashboard data for a specific teacher."
+    },
+    {
+      "id": "func:backend/routers/dashboard.py:get_school_dashboard_by_code",
+      "type": "function",
+      "name": "get_school_dashboard_by_code",
+      "file": "backend/routers/dashboard.py",
+      "line": 95,
+      "params": ["school_code", "db"],
+      "summary": "GET /api/dashboard/school/by-code/{school_code} - Returns school dashboard with students, teachers, and metrics."
+    },
+    {
+      "id": "func:backend/routers/dashboard.py:get_orcalex_dashboard",
+      "type": "function",
+      "name": "get_orcalex_dashboard",
+      "file": "backend/routers/dashboard.py",
+      "line": 170,
+      "params": ["db"],
+      "summary": "GET /api/dashboard/orcalex/all - Aggregates data across all schools for the platform admin."
+    },
+    {
+      "id": "func:backend/routers/dashboard.py:get_student_summary",
+      "type": "function",
+      "name": "get_student_summary",
+      "file": "backend/routers/dashboard.py",
+      "line": 264,
+      "params": ["student_id", "db"],
+      "summary": "GET /api/dashboard/student-summary/{student_id} - Returns detailed student profile with gap analysis and exam results."
+    },
+    {
+      "id": "func:backend/routers/chat.py:chat",
+      "type": "function",
+      "name": "chat",
+      "file": "backend/routers/chat.py",
+      "line": 32,
+      "params": ["req", "db"],
+      "summary": "POST /api/chat - Processes natural-language chat messages and returns AI-generated CRM-aware responses."
+    },
+    {
+      "id": "func:backend/routers/challenge.py:generate_preview",
+      "type": "function",
+      "name": "generate_preview",
+      "file": "backend/routers/challenge.py",
+      "line": 38,
+      "params": ["req"],
+      "summary": "POST /api/challenges/generate-preview - Generates AI-powered MCQ questions using Gemini for preview before sending."
+    },
+    {
+      "id": "func:backend/services/engagement_service.py:calculate_student_engagement",
+      "type": "function",
+      "name": "calculate_student_engagement",
+      "file": "backend/services/engagement_service.py",
+      "line": 54,
+      "params": ["student", "db", "role_label"],
+      "summary": "Core function computing a student's engagement summary including status, sessions, login recency, and active token check."
+    },
+    {
+      "id": "func:backend/services/chat_service.py:process_chat_message",
+      "type": "function",
+      "name": "process_chat_message",
+      "file": "backend/services/chat_service.py",
+      "line": null,
+      "params": ["message", "role", "school_id", "school_code", "username", "db", "dashboard_data"],
+      "summary": "Processes a chat message by classifying intent, fetching CRM data, and generating a Gemini-powered response."
+    },
+    {
+      "id": "func:backend/services/ai_service.py:generate_mcq_questions",
+      "type": "function",
+      "name": "generate_mcq_questions",
+      "file": "backend/services/ai_service.py",
+      "line": null,
+      "params": ["subject", "grade", "num_questions", "concept"],
+      "summary": "Generates MCQ questions using Gemini AI with LaTeX math support and JSON backslash fixing."
+    },
+    {
+      "id": "func:backend/services/intervention_service.py:run_intervention_check",
+      "type": "function",
+      "name": "run_intervention_check",
+      "file": "backend/services/intervention_service.py",
+      "line": null,
+      "params": ["db"],
+      "summary": "Scans all students for inactivity milestones (3/7/14 days) and sends WhatsApp alerts + MCQ challenges."
+    },
+    {
+      "id": "func:backend/scheduler.py:start_scheduler",
+      "type": "function",
+      "name": "start_scheduler",
+      "file": "backend/scheduler.py",
+      "line": 63,
+      "params": [],
+      "summary": "Starts the daily APScheduler cron job for intervention checks at 8:00 AM IST."
+    },
+    {
+      "id": "class:backend/models/django_tables.py:School",
+      "type": "class",
+      "name": "School",
+      "file": "backend/models/django_tables.py",
+      "line": 14,
+      "summary": "SQLAlchemy model for Users_school table with id, name, code, legacy_section."
+    },
+    {
+      "id": "class:backend/models/django_tables.py:Student",
+      "type": "class",
+      "name": "Student",
+      "file": "backend/models/django_tables.py",
+      "line": 40,
+      "summary": "SQLAlchemy model for Users_student table representing both students and teachers with login, school, class associations."
+    },
+    {
+      "id": "class:backend/models/django_tables.py:GapAnalysis",
+      "type": "class",
+      "name": "GapAnalysis",
+      "file": "backend/models/django_tables.py",
+      "line": 74,
+      "summary": "SQLAlchemy model for myapp_gapanalysis table tracking student practice scores by subject/chapter."
+    },
+    {
+      "id": "class:backend/models/django_tables.py:InterventionLog",
+      "type": "class",
+      "name": "InterventionLog",
+      "file": "backend/models/django_tables.py",
+      "line": 187,
+      "summary": "CRM-owned table tracking sent alerts/challenges to prevent duplicate interventions per inactivity milestone."
+    },
+    {
+      "id": "class:backend/schemas/engagement.py:EngagementStatus",
+      "type": "class",
+      "name": "EngagementStatus",
+      "file": "backend/schemas/engagement.py",
+      "line": 6,
+      "summary": "Enum defining engagement states: ACTIVE, AT_RISK, LOW_ENGAGEMENT, INACTIVE."
+    },
+    {
+      "id": "class:backend/schemas/engagement.py:StudentEngagementSummary",
+      "type": "class",
+      "name": "StudentEngagementSummary",
+      "file": "backend/schemas/engagement.py",
+      "line": 13,
+      "summary": "Pydantic model for student engagement data including login info, sessions, status, and auth provider."
+    }
+  ],
+  "edges": [
+    {"source": "file:src/index.tsx", "target": "file:src/App.tsx", "type": "imports"},
+    {"source": "file:src/index.tsx", "target": "file:src/index.css", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/context/AuthContext.tsx", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/context/DashboardContext.tsx", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/pages/LoginPage.tsx", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/pages/TeacherDashboard.tsx", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/pages/SchoolDashboard.tsx", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/pages/OrcaLexDashboard.tsx", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "file:src/components/ChatBot.tsx", "type": "imports"},
+    {"source": "file:src/pages/LoginPage.tsx", "target": "file:src/context/AuthContext.tsx", "type": "imports"},
+    {"source": "file:src/pages/LoginPage.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/services/api.ts", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/context/AuthContext.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/context/DashboardContext.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/components/MetricsCards.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/components/StudentTable.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/components/SendAlertModal.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/components/SendChallengeModal.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/components/StudentDetailModal.tsx", "type": "imports"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "file:src/components/AnalyticsSections.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/services/api.ts", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/context/AuthContext.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/context/DashboardContext.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/components/MetricsCards.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/components/StudentTable.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/components/SendAlertModal.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/components/ActivityFeed.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/components/StudentDetailModal.tsx", "type": "imports"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "file:src/components/AnalyticsSections.tsx", "type": "imports"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "file:src/services/api.ts", "type": "imports"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "file:src/context/DashboardContext.tsx", "type": "imports"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "file:src/components/StudentTable.tsx", "type": "imports"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "file:src/components/ActivityFeed.tsx", "type": "imports"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "file:src/components/AnalyticsSections.tsx", "type": "imports"},
+    {"source": "file:src/components/ChatBot.tsx", "target": "file:src/services/api.ts", "type": "imports"},
+    {"source": "file:src/components/ChatBot.tsx", "target": "file:src/context/AuthContext.tsx", "type": "imports"},
+    {"source": "file:src/components/ChatBot.tsx", "target": "file:src/context/DashboardContext.tsx", "type": "imports"},
+    {"source": "file:src/components/StudentTable.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/components/SendChallengeModal.tsx", "target": "file:src/services/api.ts", "type": "imports"},
+    {"source": "file:src/components/SendChallengeModal.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/components/SendChallengeModal.tsx", "target": "file:src/components/KaTeXText.tsx", "type": "imports"},
+    {"source": "file:src/components/StudentDetailModal.tsx", "target": "file:src/services/api.ts", "type": "imports"},
+    {"source": "file:src/components/StudentDetailModal.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/components/ActivityFeed.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/components/AnalyticsSections.tsx", "target": "file:src/components/AnalyticsCharts.tsx", "type": "imports"},
+    {"source": "file:src/components/AnalyticsSections.tsx", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/services/api.ts", "target": "file:src/types/index.ts", "type": "imports"},
+    {"source": "file:src/services/api.ts", "target": "file:backend/routers/dashboard.py", "type": "calls", "label": "HTTP API"},
+    {"source": "file:src/services/api.ts", "target": "file:backend/routers/engagement.py", "type": "calls", "label": "HTTP API"},
+    {"source": "file:src/services/api.ts", "target": "file:backend/routers/alert.py", "type": "calls", "label": "HTTP API"},
+    {"source": "file:src/services/api.ts", "target": "file:backend/routers/activity.py", "type": "calls", "label": "HTTP API"},
+    {"source": "file:src/services/api.ts", "target": "file:backend/routers/challenge.py", "type": "calls", "label": "HTTP API"},
+    {"source": "file:src/services/api.ts", "target": "file:backend/routers/chat.py", "type": "calls", "label": "HTTP API"},
+    {"source": "file:backend/main.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/cache.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/dashboard.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/engagement.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/challenge.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/activity.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/alert.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/intervention.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/routers/chat.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/scheduler.py", "type": "imports"},
+    {"source": "file:backend/main.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/database.py", "target": "file:backend/config.py", "type": "imports"},
+    {"source": "file:backend/scheduler.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/scheduler.py", "target": "file:backend/services/intervention_service.py", "type": "imports"},
+    {"source": "file:backend/models/django_tables.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/dashboard.py", "target": "file:backend/cache.py", "type": "imports"},
+    {"source": "file:backend/routers/dashboard.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/dashboard.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/routers/dashboard.py", "target": "file:backend/schemas/dashboard.py", "type": "imports"},
+    {"source": "file:backend/routers/dashboard.py", "target": "file:backend/schemas/engagement.py", "type": "imports"},
+    {"source": "file:backend/routers/dashboard.py", "target": "file:backend/services/engagement_service.py", "type": "imports"},
+    {"source": "file:backend/routers/engagement.py", "target": "file:backend/cache.py", "type": "imports"},
+    {"source": "file:backend/routers/engagement.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/engagement.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/routers/engagement.py", "target": "file:backend/schemas/engagement.py", "type": "imports"},
+    {"source": "file:backend/routers/engagement.py", "target": "file:backend/services/engagement_service.py", "type": "imports"},
+    {"source": "file:backend/routers/alert.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/alert.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/routers/alert.py", "target": "file:backend/services/whatsapp_service.py", "type": "imports"},
+    {"source": "file:backend/routers/activity.py", "target": "file:backend/cache.py", "type": "imports"},
+    {"source": "file:backend/routers/activity.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/activity.py", "target": "file:backend/schemas/activity.py", "type": "imports"},
+    {"source": "file:backend/routers/activity.py", "target": "file:backend/services/activity_service.py", "type": "imports"},
+    {"source": "file:backend/routers/challenge.py", "target": "file:backend/schemas/challenge.py", "type": "imports"},
+    {"source": "file:backend/routers/challenge.py", "target": "file:backend/services/ai_service.py", "type": "imports"},
+    {"source": "file:backend/routers/chat.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/chat.py", "target": "file:backend/services/chat_service.py", "type": "imports"},
+    {"source": "file:backend/routers/intervention.py", "target": "file:backend/database.py", "type": "imports"},
+    {"source": "file:backend/routers/intervention.py", "target": "file:backend/services/intervention_service.py", "type": "imports"},
+    {"source": "file:backend/schemas/dashboard.py", "target": "file:backend/schemas/engagement.py", "type": "imports"},
+    {"source": "file:backend/services/engagement_service.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/services/engagement_service.py", "target": "file:backend/schemas/engagement.py", "type": "imports"},
+    {"source": "file:backend/services/chat_service.py", "target": "file:backend/config.py", "type": "imports"},
+    {"source": "file:backend/services/ai_service.py", "target": "file:backend/config.py", "type": "imports"},
+    {"source": "file:backend/services/ai_service.py", "target": "file:backend/services/prompts.py", "type": "imports"},
+    {"source": "file:backend/services/activity_service.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/services/activity_service.py", "target": "file:backend/schemas/activity.py", "type": "imports"},
+    {"source": "file:backend/services/intervention_service.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:backend/services/intervention_service.py", "target": "file:backend/services/whatsapp_service.py", "type": "imports"},
+    {"source": "file:backend/services/intervention_service.py", "target": "file:backend/services/testprep_service.py", "type": "imports"},
+    {"source": "file:backend/services/testprep_service.py", "target": "file:backend/models/django_tables.py", "type": "imports"},
+    {"source": "file:src/App.tsx", "target": "func:src/App.tsx:ProtectedRoute", "type": "contains"},
+    {"source": "file:src/App.tsx", "target": "func:src/App.tsx:DashboardLayout", "type": "contains"},
+    {"source": "file:src/App.tsx", "target": "func:src/App.tsx:AppRoutes", "type": "contains"},
+    {"source": "file:src/App.tsx", "target": "func:src/App.tsx:App", "type": "contains"},
+    {"source": "file:src/context/AuthContext.tsx", "target": "func:src/context/AuthContext.tsx:useAuth", "type": "contains"},
+    {"source": "file:src/context/AuthContext.tsx", "target": "func:src/context/AuthContext.tsx:AuthProvider", "type": "contains"},
+    {"source": "file:src/context/DashboardContext.tsx", "target": "func:src/context/DashboardContext.tsx:useDashboard", "type": "contains"},
+    {"source": "file:src/pages/TeacherDashboard.tsx", "target": "func:src/pages/TeacherDashboard.tsx:TeacherDashboard", "type": "contains"},
+    {"source": "file:src/pages/SchoolDashboard.tsx", "target": "func:src/pages/SchoolDashboard.tsx:SchoolDashboard", "type": "contains"},
+    {"source": "file:src/pages/OrcaLexDashboard.tsx", "target": "func:src/pages/OrcaLexDashboard.tsx:OrcaLexDashboard", "type": "contains"},
+    {"source": "file:src/components/ChatBot.tsx", "target": "func:src/components/ChatBot.tsx:ChatBot", "type": "contains"},
+    {"source": "file:src/components/StudentTable.tsx", "target": "func:src/components/StudentTable.tsx:StudentTable", "type": "contains"},
+    {"source": "file:src/components/MetricsCards.tsx", "target": "func:src/components/MetricsCards.tsx:MetricsCards", "type": "contains"},
+    {"source": "file:src/components/AnalyticsCharts.tsx", "target": "func:src/components/AnalyticsCharts.tsx:BarChart", "type": "contains"},
+    {"source": "file:src/components/AnalyticsCharts.tsx", "target": "func:src/components/AnalyticsCharts.tsx:GroupedBarChart", "type": "contains"},
+    {"source": "file:src/components/AnalyticsCharts.tsx", "target": "func:src/components/AnalyticsCharts.tsx:LineChart", "type": "contains"},
+    {"source": "file:src/components/AnalyticsCharts.tsx", "target": "func:src/components/AnalyticsCharts.tsx:DAUWAUMAUCards", "type": "contains"},
+    {"source": "file:src/components/AnalyticsSections.tsx", "target": "func:src/components/AnalyticsSections.tsx:TeacherAnalytics", "type": "contains"},
+    {"source": "file:src/components/AnalyticsSections.tsx", "target": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics", "type": "contains"},
+    {"source": "file:src/components/AnalyticsSections.tsx", "target": "func:src/components/AnalyticsSections.tsx:AdminAnalytics", "type": "contains"},
+    {"source": "file:src/components/KaTeXText.tsx", "target": "func:src/components/KaTeXText.tsx:KaTeXText", "type": "contains"},
+    {"source": "file:src/components/ActivityFeed.tsx", "target": "func:src/components/ActivityFeed.tsx:ActivityFeed", "type": "contains"},
+    {"source": "file:backend/main.py", "target": "func:backend/main.py:lifespan", "type": "contains"},
+    {"source": "file:backend/main.py", "target": "func:backend/main.py:root", "type": "contains"},
+    {"source": "file:backend/database.py", "target": "func:backend/database.py:get_db", "type": "contains"},
+    {"source": "file:backend/cache.py", "target": "func:backend/cache.py:get", "type": "contains"},
+    {"source": "file:backend/cache.py", "target": "func:backend/cache.py:put", "type": "contains"},
+    {"source": "file:backend/routers/dashboard.py", "target": "func:backend/routers/dashboard.py:get_teacher_dashboard_by_username", "type": "contains"},
+    {"source": "file:backend/routers/dashboard.py", "target": "func:backend/routers/dashboard.py:get_school_dashboard_by_code", "type": "contains"},
+    {"source": "file:backend/routers/dashboard.py", "target": "func:backend/routers/dashboard.py:get_orcalex_dashboard", "type": "contains"},
+    {"source": "file:backend/routers/dashboard.py", "target": "func:backend/routers/dashboard.py:get_student_summary", "type": "contains"},
+    {"source": "file:backend/routers/chat.py", "target": "func:backend/routers/chat.py:chat", "type": "contains"},
+    {"source": "file:backend/routers/challenge.py", "target": "func:backend/routers/challenge.py:generate_preview", "type": "contains"},
+    {"source": "file:backend/services/engagement_service.py", "target": "func:backend/services/engagement_service.py:calculate_student_engagement", "type": "contains"},
+    {"source": "file:backend/services/chat_service.py", "target": "func:backend/services/chat_service.py:process_chat_message", "type": "contains"},
+    {"source": "file:backend/services/ai_service.py", "target": "func:backend/services/ai_service.py:generate_mcq_questions", "type": "contains"},
+    {"source": "file:backend/services/intervention_service.py", "target": "func:backend/services/intervention_service.py:run_intervention_check", "type": "contains"},
+    {"source": "file:backend/scheduler.py", "target": "func:backend/scheduler.py:start_scheduler", "type": "contains"},
+    {"source": "file:backend/models/django_tables.py", "target": "class:backend/models/django_tables.py:School", "type": "contains"},
+    {"source": "file:backend/models/django_tables.py", "target": "class:backend/models/django_tables.py:Student", "type": "contains"},
+    {"source": "file:backend/models/django_tables.py", "target": "class:backend/models/django_tables.py:GapAnalysis", "type": "contains"},
+    {"source": "file:backend/models/django_tables.py", "target": "class:backend/models/django_tables.py:InterventionLog", "type": "contains"},
+    {"source": "file:backend/schemas/engagement.py", "target": "class:backend/schemas/engagement.py:EngagementStatus", "type": "contains"},
+    {"source": "file:backend/schemas/engagement.py", "target": "class:backend/schemas/engagement.py:StudentEngagementSummary", "type": "contains"},
+    {"source": "func:src/pages/TeacherDashboard.tsx:TeacherDashboard", "target": "func:src/components/MetricsCards.tsx:MetricsCards", "type": "calls"},
+    {"source": "func:src/pages/TeacherDashboard.tsx:TeacherDashboard", "target": "func:src/components/StudentTable.tsx:StudentTable", "type": "calls"},
+    {"source": "func:src/pages/TeacherDashboard.tsx:TeacherDashboard", "target": "func:src/components/AnalyticsSections.tsx:TeacherAnalytics", "type": "calls"},
+    {"source": "func:src/pages/SchoolDashboard.tsx:SchoolDashboard", "target": "func:src/components/MetricsCards.tsx:MetricsCards", "type": "calls"},
+    {"source": "func:src/pages/SchoolDashboard.tsx:SchoolDashboard", "target": "func:src/components/StudentTable.tsx:StudentTable", "type": "calls"},
+    {"source": "func:src/pages/SchoolDashboard.tsx:SchoolDashboard", "target": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics", "type": "calls"},
+    {"source": "func:src/pages/SchoolDashboard.tsx:SchoolDashboard", "target": "func:src/components/ActivityFeed.tsx:ActivityFeed", "type": "calls"},
+    {"source": "func:src/pages/OrcaLexDashboard.tsx:OrcaLexDashboard", "target": "func:src/components/StudentTable.tsx:StudentTable", "type": "calls"},
+    {"source": "func:src/pages/OrcaLexDashboard.tsx:OrcaLexDashboard", "target": "func:src/components/AnalyticsSections.tsx:AdminAnalytics", "type": "calls"},
+    {"source": "func:src/pages/OrcaLexDashboard.tsx:OrcaLexDashboard", "target": "func:src/components/ActivityFeed.tsx:ActivityFeed", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:TeacherAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:BarChart", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:TeacherAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:LineChart", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:TeacherAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:DAUWAUMAUCards", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:GroupedBarChart", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:BarChart", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:LineChart", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:SchoolAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:DAUWAUMAUCards", "type": "calls"},
+    {"source": "func:src/components/AnalyticsSections.tsx:AdminAnalytics", "target": "func:src/components/AnalyticsCharts.tsx:DAUWAUMAUCards", "type": "calls"},
+    {"source": "func:backend/routers/dashboard.py:get_teacher_dashboard_by_username", "target": "func:backend/services/engagement_service.py:calculate_student_engagement", "type": "calls"},
+    {"source": "func:backend/routers/chat.py:chat", "target": "func:backend/services/chat_service.py:process_chat_message", "type": "calls"},
+    {"source": "func:backend/routers/challenge.py:generate_preview", "target": "func:backend/services/ai_service.py:generate_mcq_questions", "type": "calls"},
+    {"source": "func:backend/scheduler.py:start_scheduler", "target": "func:backend/services/intervention_service.py:run_intervention_check", "type": "calls"}
+  ],
+  "layers": [
+    {
+      "id": "ui",
+      "name": "UI Layer",
+      "description": "React components and pages rendering the CRM interface with role-based dashboards, data tables, modals, charts, and chatbot.",
+      "files": [
+        "src/components/ActivityFeed.tsx",
+        "src/components/AnalyticsCharts.tsx",
+        "src/components/AnalyticsSections.tsx",
+        "src/components/ChatBot.tsx",
+        "src/components/KaTeXText.tsx",
+        "src/components/MetricsCards.tsx",
+        "src/components/SendAlertModal.tsx",
+        "src/components/SendChallengeModal.tsx",
+        "src/components/StudentDetailModal.tsx",
+        "src/components/StudentTable.tsx",
+        "src/pages/LoginPage.tsx",
+        "src/pages/TeacherDashboard.tsx",
+        "src/pages/SchoolDashboard.tsx",
+        "src/pages/OrcaLexDashboard.tsx",
+        "src/App.tsx",
+        "src/index.tsx"
+      ]
+    },
+    {
+      "id": "api",
+      "name": "API Layer",
+      "description": "Frontend API client (axios) and backend FastAPI routers handling HTTP requests for dashboards, engagement, alerts, activity, challenges, and chat.",
+      "files": [
+        "src/services/api.ts",
+        "backend/routers/dashboard.py",
+        "backend/routers/engagement.py",
+        "backend/routers/alert.py",
+        "backend/routers/activity.py",
+        "backend/routers/challenge.py",
+        "backend/routers/chat.py",
+        "backend/routers/intervention.py"
+      ]
+    },
+    {
+      "id": "service",
+      "name": "Service Layer",
+      "description": "Backend business logic services for engagement calculation, AI-powered chat and MCQ generation, WhatsApp messaging, activity tracking, and automated interventions.",
+      "files": [
+        "backend/services/engagement_service.py",
+        "backend/services/chat_service.py",
+        "backend/services/ai_service.py",
+        "backend/services/whatsapp_service.py",
+        "backend/services/activity_service.py",
+        "backend/services/intervention_service.py",
+        "backend/services/testprep_service.py",
+        "backend/services/prompts.py"
+      ]
+    },
+    {
+      "id": "data",
+      "name": "Data Layer",
+      "description": "SQLAlchemy ORM models mirroring Django tables, Pydantic response schemas, and database connection management.",
+      "files": [
+        "backend/models/django_tables.py",
+        "backend/database.py",
+        "backend/schemas/dashboard.py",
+        "backend/schemas/engagement.py",
+        "backend/schemas/activity.py",
+        "backend/schemas/challenge.py",
+        "src/types/index.ts"
+      ]
+    },
+    {
+      "id": "config",
+      "name": "Config Layer",
+      "description": "Application configuration including environment variables, cache settings, scheduler setup, Tailwind CSS, and TypeScript compiler options.",
+      "files": [
+        "backend/config.py",
+        "backend/cache.py",
+        "backend/scheduler.py",
+        "tailwind.config.js",
+        "tsconfig.json"
+      ]
+    },
+    {
+      "id": "auth",
+      "name": "Auth Layer",
+      "description": "Client-side authentication context managing user roles, login/logout with localStorage, and route protection.",
+      "files": [
+        "src/context/AuthContext.tsx",
+        "src/context/DashboardContext.tsx"
+      ]
+    },
+    {
+      "id": "standalone",
+      "name": "Application Entry Points",
+      "description": "Main entry points for both frontend (index.tsx) and backend (main.py) applications.",
+      "files": [
+        "src/index.tsx",
+        "backend/main.py"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "step": 1,
+      "title": "Frontend Entry Point",
+      "file": "src/index.tsx",
+      "description": "The React app starts here, rendering the App component into the DOM. This is the standard Create React App entry point."
+    },
+    {
+      "step": 2,
+      "title": "App Router & Layout",
+      "file": "src/App.tsx",
+      "description": "The App component wraps everything in AuthProvider and DashboardProvider contexts, then defines routes: /login goes to LoginPage, and /teacher, /school, /orcalex go to role-specific dashboards wrapped in ProtectedRoute (auth check) and DashboardLayout (navigation + ChatBot)."
+    },
+    {
+      "step": 3,
+      "title": "Authentication & Role Selection",
+      "file": "src/context/AuthContext.tsx",
+      "description": "AuthContext manages user state with localStorage persistence. The login function creates a mock user with the selected role (Teacher, School Admin, OrcaLex Admin). Teachers provide a username, School Admins provide a school code. This role determines which dashboard and which API endpoints to call."
+    },
+    {
+      "step": 4,
+      "title": "Dashboard Page (Teacher Example)",
+      "file": "src/pages/TeacherDashboard.tsx",
+      "description": "Each dashboard page loads data from the API on mount (e.g., getTeacherDashboardByUsername), then renders MetricsCards, AnalyticsSections charts, recent alerts, and a StudentTable. Users can send WhatsApp alerts, create AI MCQ challenges, and view student detail modals. The data is also shared via DashboardContext to the ChatBot."
+    },
+    {
+      "step": 5,
+      "title": "API Client Bridge",
+      "file": "src/services/api.ts",
+      "description": "The api.ts file bridges frontend and backend using two axios instances: one for the production API (crmapi.smartlearners.ai) and one for local development (localhost:8000). It exports typed API objects (dashboardAPI, engagementAPI, alertAPI, etc.) that map to backend REST endpoints."
+    },
+    {
+      "step": 6,
+      "title": "Backend Entry & Routing",
+      "file": "backend/main.py",
+      "description": "The FastAPI application registers 7 routers (dashboard, engagement, challenge, activity, alert, intervention, chat), configures CORS for localhost:3000, and manages the app lifecycle: creating CRM tables on startup and starting the daily intervention scheduler."
+    },
+    {
+      "step": 7,
+      "title": "Core Business Logic",
+      "file": "backend/services/engagement_service.py",
+      "description": "The engagement service is the heart of the CRM. It calculates each student's engagement status (Active/At-Risk/Low/Inactive) based on days since last login and JWT session counts. It queries the Django-mirrored Student, OutstandingToken, and GapAnalysis tables via SQLAlchemy to build StudentEngagementSummary objects used by all dashboards."
+    },
+    {
+      "step": 8,
+      "title": "Data Layer & Models",
+      "file": "backend/models/django_tables.py",
+      "description": "SQLAlchemy ORM models mirror the existing Django PostgreSQL tables (Users_student, Users_school, myapp_gapanalysis, etc.) as read-only. The CRM also owns the crm_intervention_log table for tracking automated alerts. The database.py file manages the SQLAlchemy engine and session factory connected via DATABASE_URL from config.py."
+    }
+  ]
+}
