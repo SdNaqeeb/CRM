@@ -84,6 +84,10 @@ export interface TestPrepItem {
   student_id: number;
   username: string;
   student_name: string;
+  class_name?: string | null;
+  section_name?: string | null;
+  school_id?: number;
+  school_name?: string | null;
   name: string;
   description?: string | null;
   created_at: string;

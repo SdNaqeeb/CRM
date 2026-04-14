@@ -90,9 +90,9 @@ const ChartCard: React.FC<{
 
 const DarkTooltip: React.FC<{
   active?: boolean;
-  payload?: any[];
-  label?: string;
-  formatter?: (value: number, name: string) => [string, string];
+  payload?: readonly any[];
+  label?: string | number;
+  formatter?: any;
 }> = ({ active, payload, label, formatter }) => {
   if (!active || !payload?.length) return null;
 
@@ -111,9 +111,10 @@ const DarkTooltip: React.FC<{
         {label}
       </p>
       {payload.map((entry: any, i: number) => {
+        const entryName = entry.dataKey ?? entry.name ?? entry.payload?.name ?? '';
         const [displayValue, displayName] = formatter
-          ? formatter(entry.value, entry.name)
-          : [entry.value, entry.name];
+          ? formatter(entry.value, entryName)
+          : [entry.value, entryName];
         return (
           <p
             key={i}
@@ -143,6 +144,7 @@ interface BarChartProps {
   title: string;
   height?: number;
   showValues?: boolean;
+  valueLabel?: string;
 }
 
 export const BarChart: React.FC<BarChartProps> = ({
@@ -150,6 +152,7 @@ export const BarChart: React.FC<BarChartProps> = ({
   title,
   height = 240,
   showValues = true,
+  valueLabel = 'Count',
 }) => {
   const gradientId = React.useId?.() ?? `bar-grad-${title.replace(/\s/g, '')}`;
 
@@ -165,6 +168,9 @@ export const BarChart: React.FC<BarChartProps> = ({
     name: d.label,
     fill: d.color || DEFAULT_BAR_COLORS[i % DEFAULT_BAR_COLORS.length],
   }));
+
+  // For single data point, limit bar width to prevent overly wide bars
+  const maxBarSize = data.length === 1 ? 80 : undefined;
 
   return (
     <ChartCard title={title}>
@@ -185,8 +191,8 @@ export const BarChart: React.FC<BarChartProps> = ({
           />
           <XAxis
             dataKey="name"
-            tick={{ fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY }}
-            axisLine={{ stroke: THEME.gridLine }}
+            tick={false}
+            axisLine={false}
             tickLine={false}
           />
           <YAxis
@@ -195,8 +201,14 @@ export const BarChart: React.FC<BarChartProps> = ({
             tickLine={false}
           />
           <Tooltip
-            content={<DarkTooltip formatter={(v, name) => [String(v), name === 'value' ? 'Count' : name]} />}
+            content={(props) => (
+              <DarkTooltip
+                {...props}
+                formatter={(v: any, name: any) => [String(v), name === 'value' ? valueLabel : name]}
+              />
+            )}
             cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+            wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
           />
           <Bar
             dataKey="value"
@@ -214,6 +226,7 @@ export const BarChart: React.FC<BarChartProps> = ({
             }
             animationDuration={800}
             animationEasing="ease-out"
+            maxBarSize={maxBarSize}
           >
             {chartData.map((d, i) => (
               <Cell key={i} fill={`url(#${gradientId}-${i})`} />
@@ -263,6 +276,9 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     [legend2]: d.value2,
   }));
 
+  // For single data point, limit bar width to prevent overly wide bars
+  const maxBarSize = data.length === 1 ? 80 : undefined;
+
   const containerWidth = minBarSlotWidth
     ? Math.max(minBarSlotWidth * data.length + 80, 400)
     : undefined;
@@ -293,25 +309,28 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
         />
         <XAxis
           dataKey="name"
-          tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_BODY }}
-          axisLine={{ stroke: THEME.gridLine }}
+          tick={false}
+          axisLine={false}
           tickLine={false}
-          angle={data.length > 6 ? -30 : 0}
-          textAnchor={data.length > 6 ? 'end' : 'middle'}
-          height={data.length > 6 ? 60 : 30}
+          height={0}
         />
         <YAxis
           tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}
           axisLine={false}
           tickLine={false}
         />
-        <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+        <Tooltip
+          content={(props) => <DarkTooltip {...props} />}
+          cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+          wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
+        />
         <Bar
           dataKey={legend1}
           fill={color1}
           radius={[4, 4, 0, 0]}
           animationDuration={800}
           animationEasing="ease-out"
+          maxBarSize={maxBarSize}
         />
         <Bar
           dataKey={legend2}
@@ -319,6 +338,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
           radius={[4, 4, 0, 0]}
           animationDuration={800}
           animationEasing="ease-out"
+          maxBarSize={maxBarSize}
         />
       </RBarChart>
     </ResponsiveContainer>
@@ -347,6 +367,9 @@ interface StackedBarChartProps {
   title: string;
   segments: { key: string; label: string; color: string }[];
   height?: number;
+  xDataKey?: string;
+  xTickFormatter?: (value: string | number) => string;
+  tooltipLabelFormatter?: (value: string | number) => string;
 }
 
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({
@@ -354,6 +377,9 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
   title,
   segments,
   height = 260,
+  xDataKey = 'label',
+  xTickFormatter,
+  tooltipLabelFormatter,
 }) => {
   if (!data.length) {
     return (
@@ -363,26 +389,40 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
     );
   }
 
+  // For single data point, limit bar width to prevent overly wide bars
+  const maxBarSize = data.length === 1 ? 80 : undefined;
+
   return (
     <ChartCard title={title}>
       <ResponsiveContainer width="100%" height={height}>
         <RBarChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={THEME.gridLine} vertical={false} />
           <XAxis
-            dataKey="label"
-            tick={{ fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY }}
-            axisLine={{ stroke: THEME.gridLine }}
+            dataKey={xDataKey}
+            tick={false}
+            axisLine={false}
             tickLine={false}
-            angle={data.length > 6 ? -30 : 0}
-            textAnchor={data.length > 6 ? 'end' : 'middle'}
-            height={data.length > 6 ? 60 : 30}
+            height={0}
           />
           <YAxis
             tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+          <Tooltip
+            content={(props) => (
+              <DarkTooltip
+                {...props}
+                label={
+                  tooltipLabelFormatter && props.label !== undefined
+                    ? tooltipLabelFormatter(props.label)
+                    : props.label
+                }
+              />
+            )}
+            cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+            wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
+          />
           {segments.map((segment) => (
             <Bar
               key={segment.key}
@@ -392,6 +432,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
               radius={[4, 4, 0, 0]}
               animationDuration={800}
               animationEasing="ease-out"
+              maxBarSize={maxBarSize}
             />
           ))}
         </RBarChart>
@@ -405,10 +446,15 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
    ──────────────────────────────────────────── */
 
 interface LineChartProps {
-  data: { label: string; value: number }[];
+  data: ({ label: string; value: number } & Record<string, string | number>)[];
   title: string;
   color?: string;
   height?: number;
+  xDataKey?: string;
+  showXAxisTicks?: boolean;
+  xTickFormatter?: (value: string | number) => string;
+  tooltipLabelFormatter?: (value: string | number) => string;
+  tooltipValueFormatter?: (value: string | number, name: string | number) => [string, string];
 }
 
 export const LineChart: React.FC<LineChartProps> = ({
@@ -416,6 +462,11 @@ export const LineChart: React.FC<LineChartProps> = ({
   title,
   color = COLORS.teal,
   height = 240,
+  xDataKey = 'name',
+  showXAxisTicks = false,
+  xTickFormatter,
+  tooltipLabelFormatter,
+  tooltipValueFormatter,
 }) => {
   const gradientId = React.useId?.() ?? `area-grad-${title.replace(/\s/g, '')}`;
 
@@ -426,7 +477,7 @@ export const LineChart: React.FC<LineChartProps> = ({
       </ChartCard>
     );
 
-  const chartData = data.map((d) => ({ name: d.label, value: d.value }));
+  const chartData = data.map((d) => ({ ...d, name: d.label, value: d.value }));
 
   return (
     <ChartCard title={title}>
@@ -444,17 +495,43 @@ export const LineChart: React.FC<LineChartProps> = ({
             vertical={false}
           />
           <XAxis
-            dataKey="name"
-            tick={{ fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY }}
-            axisLine={{ stroke: THEME.gridLine }}
+            dataKey={xDataKey}
+            tick={
+              showXAxisTicks
+                ? { fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY }
+                : false
+            }
+            axisLine={showXAxisTicks ? { stroke: THEME.gridLine } : false}
             tickLine={false}
+            tickFormatter={xTickFormatter}
+            angle={showXAxisTicks && data.length > 6 ? -30 : 0}
+            textAnchor={showXAxisTicks && data.length > 6 ? 'end' : 'middle'}
+            height={showXAxisTicks ? (data.length > 6 ? 60 : 30) : 0}
           />
           <YAxis
             tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip content={<DarkTooltip formatter={(v, name) => [String(v), name === 'value' ? 'Sessions' : name]} />} cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: '4 3', opacity: 0.4 }} />
+          <Tooltip
+            content={(props) => (
+              <DarkTooltip
+                {...props}
+                label={
+                  tooltipLabelFormatter && props.label !== undefined
+                    ? tooltipLabelFormatter(props.label)
+                    : props.label
+                }
+                formatter={(v: any, name: any) =>
+                  tooltipValueFormatter
+                    ? tooltipValueFormatter(v, name)
+                    : [String(v), name === 'value' ? 'Score ' : String(name)]
+                }
+              />
+            )}
+            cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: '4 3', opacity: 0.4 }}
+            wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
+          />
           <Area
             type="monotone"
             dataKey="value"

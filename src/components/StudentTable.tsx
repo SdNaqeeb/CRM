@@ -42,6 +42,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
   const [filter, setFilter] = useState<'all' | EngagementStatus>('all');
   const [sortBy, setSortBy] = useState<'name' | 'lastLogin' | 'sessions' | 'highEngagement' | 'lowEngagement'>('name');
   const [classFilter, setClassFilter] = useState<string>('all');
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
 
   const selectable = !!onSelectionChange;
 
@@ -87,10 +88,18 @@ const StudentTable: React.FC<StudentTableProps> = ({
 
   // Get unique classes for filter
   const uniqueClasses = Array.from(new Set(students.map(s => s.grade || 'Unknown'))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const uniqueSections = Array.from(
+    new Set(
+      students
+        .filter((student) => classFilter === 'all' ? true : (student.grade || 'Unknown') === classFilter)
+        .map((student) => student.section || 'Unknown')
+    )
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
   const filteredStudents = students
     .filter((student) => filter === 'all' ? true : student.engagement_status === filter)
-    .filter((student) => classFilter === 'all' ? true : (student.grade || 'Unknown') === classFilter);
+    .filter((student) => classFilter === 'all' ? true : (student.grade || 'Unknown') === classFilter)
+    .filter((student) => sectionFilter === 'all' ? true : (student.section || 'Unknown') === sectionFilter);
 
   const engagementOrder: Record<string, number> = {
     [EngagementStatus.ACTIVE]: 4,
@@ -225,7 +234,10 @@ const StudentTable: React.FC<StudentTableProps> = ({
             <span style={{ fontSize: '12px', fontWeight: 600, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Class</span>
             <select
               value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
+              onChange={(e) => {
+                setClassFilter(e.target.value);
+                setSectionFilter('all');
+              }}
               style={{
                 padding: '6px 12px',
                 borderRadius: '8px',
@@ -242,6 +254,31 @@ const StudentTable: React.FC<StudentTableProps> = ({
               <option value="all">All Classes</option>
               {uniqueClasses.map((c) => (
                 <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Section</span>
+            <select
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: `1.5px solid ${COLORS.inputBorder}`,
+                background: COLORS.headerBg,
+                fontSize: '13px',
+                fontWeight: 500,
+                color: COLORS.textSecondary,
+                cursor: 'pointer',
+                outline: 'none',
+                fontFamily: FONT,
+              }}
+            >
+              <option value="all">All Sections</option>
+              {uniqueSections.map((section) => (
+                <option key={section} value={section}>{section}</option>
               ))}
             </select>
           </div>

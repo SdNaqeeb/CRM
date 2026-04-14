@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { dashboardAPI, alertAPI, activityAPI } from '../services/api';
 import { SchoolDashboardData, ActivityOverview, StudentEngagementSummary } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,7 @@ const FONT_SERIF = "'Source Serif 4', Georgia, serif";
 const SchoolDashboard: React.FC = () => {
   const { user } = useAuth();
   const { setDashboardData } = useDashboard();
+  const lastSchoolDashboardRequestRef = useRef<string | null>(null);
   const [schoolData, setSchoolData] = useState<SchoolDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -86,6 +87,9 @@ const SchoolDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    if (!schoolCode) return;
+    if (lastSchoolDashboardRequestRef.current === schoolCode) return;
+    lastSchoolDashboardRequestRef.current = schoolCode;
     loadDashboard();
   }, [schoolCode]);
 
@@ -186,13 +190,13 @@ const SchoolDashboard: React.FC = () => {
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 800, color: '#F1F5F9', letterSpacing: '-0.03em', fontFamily: FONT_SERIF }}>
               {schoolData.school_name}
             </h1>
-            <span style={{
+            {/* <span style={{
               padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
               background: schoolData.engagement_trend === 'up' ? 'rgba(16,185,129,0.15)' : schoolData.engagement_trend === 'down' ? 'rgba(244,63,94,0.15)' : 'rgba(245,158,11,0.15)',
               color: schoolData.engagement_trend === 'up' ? '#10B981' : schoolData.engagement_trend === 'down' ? '#F43F5E' : '#F59E0B',
             }}>
               {schoolData.engagement_trend === 'up' ? '\u2191 Improving' : schoolData.engagement_trend === 'down' ? '\u2193 Declining' : '\u2192 Stable'}
-            </span>
+            </span> */}
           </div>
           {/* Middle - Students & Teachers */}
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>

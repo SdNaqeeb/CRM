@@ -96,9 +96,9 @@ const MetricsCards: React.FC<MetricsCardsProps> = ({
   const mauPct = Math.round((mau / total) * 100);
 
   const extraGauges = students ? [
-    { label: 'DAU', value: dau, pct: dauPct, color: '#14B8A6', sub: 'Daily Active Users', delay: 0.15 },
-    { label: 'WAU', value: wau, pct: wauPct, color: '#6366F1', sub: 'Weekly Active Users', delay: 0.2 },
-    { label: 'MAU', value: mau, pct: mauPct, color: '#EC4899', sub: 'Monthly Active Users', delay: 0.25 },
+    // { label: 'DAU', value: dau, pct: dauPct, color: '#14B8A6', sub: 'Daily Active Users', delay: 0.15 },
+    // { label: 'WAU', value: wau, pct: wauPct, color: '#6366F1', sub: 'Weekly Active Users', delay: 0.2 },
+    // { label: 'MAU', value: mau, pct: mauPct, color: '#EC4899', sub: 'Monthly Active Users', delay: 0.25 },
   ] : [];
 
   const cardStyle = (color: string, delay: number): React.CSSProperties => ({

@@ -55,16 +55,16 @@ export const dashboardAPI = {
     return response.data;
   },
 
-  getTestPrepBySchoolCode: async (schoolCode: string, limit: number = 100) => {
-    const response = await api.post('/api/test-prep/by-school-code', {
+  getTestPrepBySchoolCode: async (schoolCode: string, limit: number = 500) => {
+    const response = await api.post('/api/external-data/test-prep/by-school-code', {
       school_code: schoolCode,
       limit,
     });
     return response.data;
   },
 
-  getTestPrepByUsernameSchoolCode: async (schoolCode: string, username: string, limit: number = 100) => {
-    const response = await api.post('/api/test-prep/by-username-school-code', {
+  getTestPrepByUsernameSchoolCode: async (schoolCode: string, username: string, limit: number = 500) => {
+    const response = await api.post('/api/external-data/test-prep/by-username-school-code', {
       school_code: schoolCode,
       username,
       limit,
