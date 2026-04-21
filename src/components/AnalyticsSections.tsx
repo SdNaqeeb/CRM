@@ -732,18 +732,7 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
             >
               Test Prep Analysis
             </h3>
-            <span
-              style={{
-                padding: '1px 8px',
-                borderRadius: '99px',
-                background: 'rgba(139,92,246,0.15)',
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#8B5CF6',
-              }}
-            >
-              {schoolPrepData?.total ?? 0} items
-            </span>
+            
           </div>
 
           {prepError ? (
@@ -1168,7 +1157,7 @@ const SchoolWiseDonutGrid: React.FC<{ schools: OrcaLexSchoolSummary[] }> = ({ sc
                   fontWeight: 500,
                 }}
               >
-                {school.total_students} students &middot; {school.total_teachers} teachers &middot; {school.total_sessions_this_week} sessions/wk
+                {school.total_students} students &middot;  {school.total_sessions_this_week} sessions/wk
               </p>
 
               {/* Donut + Legend row */}

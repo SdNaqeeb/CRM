@@ -176,7 +176,7 @@ const SchoolDashboard: React.FC = () => {
 
   const tabs = [
     { key: 'students' as const, label: 'Students', count: filteredStudentsList.length, color: '#3B82F6' },
-    { key: 'teachers' as const, label: 'Teachers', count: filteredTeachersList.length, color: '#8B5CF6' },
+    // { key: 'teachers' as const, label: 'Teachers', count: filteredTeachersList.length, color: '#8B5CF6' },
     { key: 'activity' as const, label: 'Activity', count: null, color: '#10B981' },
   ];
 
@@ -203,9 +203,9 @@ const SchoolDashboard: React.FC = () => {
             <span style={{ padding: '4px 14px', borderRadius: '8px', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)', fontSize: '14px', fontWeight: 700, color: '#3B82F6', fontFamily: FONT_SERIF }}>
               {schoolData.students.length} <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8' }}>Students</span>
             </span>
-            <span style={{ padding: '4px 14px', borderRadius: '8px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', fontSize: '14px', fontWeight: 700, color: '#8B5CF6', fontFamily: FONT_SERIF }}>
+            {/* <span style={{ padding: '4px 14px', borderRadius: '8px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.2)', fontSize: '14px', fontWeight: 700, color: '#8B5CF6', fontFamily: FONT_SERIF }}>
               {schoolData.teachers.length} <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8' }}>Teachers</span>
-            </span>
+            </span> */}
           </div>
           {/* Right - Refresh */}
           <button onClick={loadDashboard} style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #7c3aed, #8B5CF6)', color: '#fff', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, boxShadow: '0 2px 8px rgba(139,92,246,0.25)', display: 'flex', alignItems: 'center', gap: '5px' }}>

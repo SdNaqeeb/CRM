@@ -176,8 +176,8 @@ const ChatBot: React.FC = () => {
   const isSchoolAdmin = role === 'school_admin';
   const suggestions = SUGGESTIONS[role] || SUGGESTIONS.teacher;
 
-  const accentColor = role === 'orcalex_admin' ? '#8B5CF6' : role === 'school_admin' ? '#3B82F6' : '#14B8A6';
-  const accentDark = role === 'orcalex_admin' ? 'rgba(139,92,246,0.15)' : role === 'school_admin' ? 'rgba(59,130,246,0.15)' : 'rgba(20,184,166,0.15)';
+  const accentColor = role === 'orcalex_admin' ? '#7c3aed' : role === 'school_admin' ? '#4f46e5' : '#0d9488';
+  const accentLight = role === 'orcalex_admin' ? '#ede9fe' : role === 'school_admin' ? '#eef2ff' : '#f0fdfa';
 
   return (
     <>
@@ -192,11 +192,11 @@ const ChatBot: React.FC = () => {
             width: '56px',
             height: '56px',
             borderRadius: '50%',
-            background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
+            background: `linear-gradient(135deg, ${accentColor}, ${accentColor}dd)`,
             color: '#fff',
             border: 'none',
             cursor: 'pointer',
-            boxShadow: `0 4px 20px ${accentColor}55, 0 0 40px ${accentColor}22`,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -206,11 +206,11 @@ const ChatBot: React.FC = () => {
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'scale(1.08)';
-            e.currentTarget.style.boxShadow = `0 6px 28px ${accentColor}66, 0 0 50px ${accentColor}33`;
+            e.currentTarget.style.boxShadow = '0 6px 28px rgba(0,0,0,0.25)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = `0 4px 20px ${accentColor}55, 0 0 40px ${accentColor}22`;
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.2)';
           }}
           title="Open CRM Assistant"
         >
@@ -229,10 +229,9 @@ const ChatBot: React.FC = () => {
             right: '24px',
             width: '460px',
             height: '560px',
-            background: '#111827',
+            background: '#fff',
             borderRadius: '16px',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px #1E293B',
-            border: '1px solid #1E293B',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
             display: 'flex',
             flexDirection: 'column',
             zIndex: 1000,
@@ -244,28 +243,27 @@ const ChatBot: React.FC = () => {
           <div
             style={{
               padding: '16px 20px',
-              background: `linear-gradient(135deg, ${accentColor}33, ${accentColor}18)`,
-              borderBottom: '1px solid #1E293B',
-              color: '#F1F5F9',
+              background: `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`,
+              color: '#fff',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
             }}
           >
             <div>
-              <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#F1F5F9' }}>
+              <div style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 CRM Assistant
               </div>
-              <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+              <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
                 Ask about students, engagement & activity
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
               style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid #334155',
-                color: '#94A3B8',
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                color: '#fff',
                 width: '32px',
                 height: '32px',
                 borderRadius: '8px',
@@ -274,10 +272,10 @@ const ChatBot: React.FC = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '18px',
-                transition: 'background 0.15s, color 0.15s',
+                transition: 'background 0.15s',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#F1F5F9'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#94A3B8'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.3)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
             >
               &#x2715;
             </button>
@@ -290,8 +288,8 @@ const ChatBot: React.FC = () => {
               padding: '8px 16px',
               display: 'flex',
               gap: '6px',
-              borderBottom: '1px solid #1E293B',
-              background: '#111827',
+              borderBottom: '1px solid #e8e6e1',
+              background: '#fff',
               flexShrink: 0,
               overflowX: 'auto',
               overflowY: 'hidden',
@@ -306,8 +304,8 @@ const ChatBot: React.FC = () => {
                 style={{
                   padding: '5px 11px',
                   borderRadius: '99px',
-                  border: `1px solid ${accentColor}44`,
-                  background: accentDark,
+                  border: `1px solid ${accentColor}40`,
+                  background: accentLight,
                   color: accentColor,
                   fontSize: '11px',
                   fontWeight: 600,
@@ -325,7 +323,7 @@ const ChatBot: React.FC = () => {
                   }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = accentDark;
+                  e.currentTarget.style.background = accentLight;
                   e.currentTarget.style.color = accentColor;
                 }}
               >
@@ -343,7 +341,7 @@ const ChatBot: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
               gap: '12px',
-              background: '#0B1120',
+              background: '#fafaf8',
             }}
           >
             {messages.map((msg) => (
@@ -361,12 +359,12 @@ const ChatBot: React.FC = () => {
                     borderRadius: msg.sender === 'user'
                       ? '14px 14px 4px 14px'
                       : '14px 14px 14px 4px',
-                    background: msg.sender === 'user' ? accentColor : '#0F172A',
-                    color: msg.sender === 'user' ? '#fff' : '#F1F5F9',
+                    background: msg.sender === 'user' ? accentColor : '#fff',
+                    color: msg.sender === 'user' ? '#fff' : '#1e293b',
                     fontSize: '13px',
                     lineHeight: '1.5',
-                    boxShadow: msg.sender === 'bot' ? '0 1px 4px rgba(0,0,0,0.2)' : 'none',
-                    border: msg.sender === 'bot' ? '1px solid #1E293B' : 'none',
+                    boxShadow: msg.sender === 'bot' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                    border: msg.sender === 'bot' ? '1px solid #e8e6e1' : 'none',
                     fontFamily: "'Plus Jakarta Sans', sans-serif",
                     whiteSpace: msg.sender === 'user' ? 'pre-wrap' : 'normal',
                     wordBreak: 'break-word',
@@ -389,9 +387,9 @@ const ChatBot: React.FC = () => {
                   style={{
                     padding: '12px 18px',
                     borderRadius: '14px 14px 14px 4px',
-                    background: '#0F172A',
-                    border: '1px solid #1E293B',
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                    background: '#fff',
+                    border: '1px solid #e8e6e1',
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'center',
@@ -400,7 +398,7 @@ const ChatBot: React.FC = () => {
                   <span
                     style={{
                       fontSize: '12px',
-                      color: '#94A3B8',
+                      color: '#64748b',
                       fontFamily: "'Plus Jakarta Sans', sans-serif",
                       fontWeight: 500,
                     }}
@@ -432,15 +430,15 @@ const ChatBot: React.FC = () => {
             <div
               style={{
                 padding: '8px 16px',
-                borderTop: '1px solid #1E293B',
-                background: '#0F172A',
+                borderTop: '1px solid #e8e6e1',
+                background: '#f8fafc',
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'center',
                 flexShrink: 0,
               }}
             >
-              <span style={{ fontSize: '11px', fontWeight: 600, color: '#94A3B8', fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, color: '#475569', fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: 'nowrap' }}>
                 Improvement of
               </span>
               <select
@@ -449,12 +447,12 @@ const ChatBot: React.FC = () => {
                 style={{
                   padding: '5px 8px',
                   borderRadius: '6px',
-                  border: '1.5px solid #334155',
+                  border: '1.5px solid #e2e8f0',
                   fontSize: '11px',
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                   outline: 'none',
-                  background: '#111827',
-                  color: '#F1F5F9',
+                  background: '#fff',
+                  color: '#1e293b',
                   cursor: 'pointer',
                   minWidth: '80px',
                 }}
@@ -464,7 +462,7 @@ const ChatBot: React.FC = () => {
                   <option key={c} value={c}>Class {c}</option>
                 ))}
               </select>
-              <span style={{ fontSize: '11px', color: '#64748B', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 wrt
               </span>
               <select
@@ -473,12 +471,12 @@ const ChatBot: React.FC = () => {
                 style={{
                   padding: '5px 8px',
                   borderRadius: '6px',
-                  border: '1.5px solid #334155',
+                  border: '1.5px solid #e2e8f0',
                   fontSize: '11px',
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                   outline: 'none',
-                  background: '#111827',
-                  color: '#F1F5F9',
+                  background: '#fff',
+                  color: '#1e293b',
                   cursor: 'pointer',
                   minWidth: '100px',
                 }}
@@ -495,8 +493,8 @@ const ChatBot: React.FC = () => {
           <div
             style={{
               padding: '12px 16px',
-              borderTop: '1px solid #1E293B',
-              background: '#111827',
+              borderTop: '1px solid #e8e6e1',
+              background: '#fff',
               display: 'flex',
               gap: '8px',
               alignItems: 'center',
@@ -514,16 +512,15 @@ const ChatBot: React.FC = () => {
                 flex: 1,
                 padding: '10px 14px',
                 borderRadius: '10px',
-                border: '1.5px solid #334155',
+                border: '1.5px solid #e2e8f0',
                 fontSize: '13px',
                 fontFamily: "'Plus Jakarta Sans', sans-serif",
                 outline: 'none',
                 transition: 'border-color 0.15s',
-                background: isLoading ? '#1E293B' : '#0F172A',
-                color: '#F1F5F9',
+                background: isLoading ? '#f8fafc' : '#fff',
               }}
               onFocus={(e) => { e.currentTarget.style.borderColor = accentColor; }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = '#334155'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; }}
             />
             <button
               onClick={() => sendMessage(input)}
@@ -533,8 +530,8 @@ const ChatBot: React.FC = () => {
                 height: '40px',
                 borderRadius: '10px',
                 border: 'none',
-                background: input.trim() && !isLoading ? accentColor : '#334155',
-                color: input.trim() && !isLoading ? '#fff' : '#64748B',
+                background: input.trim() && !isLoading ? accentColor : '#e2e8f0',
+                color: input.trim() && !isLoading ? '#fff' : '#94a3b8',
                 cursor: input.trim() && !isLoading ? 'pointer' : 'default',
                 display: 'flex',
                 alignItems: 'center',
@@ -555,16 +552,16 @@ const ChatBot: React.FC = () => {
       {/* Keyframe animations */}
       <style>{`
         .chat-suggestions::-webkit-scrollbar { display: none; }
-        .chat-markdown h2 { font-size: 13px; font-weight: 700; margin: 10px 0 4px 0; color: #F1F5F9; }
-        .chat-markdown h3 { font-size: 12px; font-weight: 700; margin: 8px 0 3px 0; color: #94A3B8; }
+        .chat-markdown h2 { font-size: 13px; font-weight: 700; margin: 10px 0 4px 0; color: #1e293b; }
+        .chat-markdown h3 { font-size: 12px; font-weight: 700; margin: 8px 0 3px 0; color: #334155; }
         .chat-markdown p { margin: 4px 0; }
         .chat-markdown ul, .chat-markdown ol { margin: 4px 0; padding-left: 18px; }
         .chat-markdown li { margin: 2px 0; }
         .chat-markdown strong { font-weight: 700; }
         .chat-markdown table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; display: block; overflow-x: auto; }
-        .chat-markdown th { background: #1E293B; padding: 5px 8px; text-align: left; border: 1px solid #334155; font-weight: 600; color: #94A3B8; }
-        .chat-markdown td { padding: 4px 8px; border: 1px solid #334155; color: #F1F5F9; }
-        .chat-markdown tr:nth-child(even) td { background: #111827; }
+        .chat-markdown th { background: #f1f5f9; padding: 5px 8px; text-align: left; border: 1px solid #e2e8f0; font-weight: 600; }
+        .chat-markdown td { padding: 4px 8px; border: 1px solid #e2e8f0; }
+        .chat-markdown tr:nth-child(even) td { background: #f8fafc; }
         @keyframes chatSlideUp {
           from { opacity: 0; transform: translateY(20px) scale(0.95); }
           to { opacity: 1; transform: translateY(0) scale(1); }
