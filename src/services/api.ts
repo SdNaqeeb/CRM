@@ -14,7 +14,7 @@ import type {
   GeneratePreviewResponse,
 } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://crmapi.smartlearners.ai';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://crm.smartlearners.ai/backend-api/';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

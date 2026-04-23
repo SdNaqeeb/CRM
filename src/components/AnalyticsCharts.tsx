@@ -281,8 +281,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     [legend2]: d.value2,
   }));
 
-  // For single data point, limit bar width to prevent overly wide bars
-  const maxBarSize = data.length === 1 ? 80 : undefined;
+  const maxBarSize = 40;
 
   const containerWidth = minBarSlotWidth
     ? Math.max(minBarSlotWidth * data.length + 80, 400)
@@ -306,12 +305,8 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
 
   const chart = (
     <ResponsiveContainer width="100%" height={height}>
-      <RBarChart data={chartData} margin={{ top: 12, right: 16, bottom: 8, left: 8 }}>
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke={THEME.gridLine}
-          vertical={false}
-        />
+      <RBarChart data={chartData} margin={{ top: 12, right: 16, bottom: 8, left: 8 }} barGap={1}>
+        <CartesianGrid strokeDasharray="3 3" stroke={THEME.gridLine} vertical={false} />
         <XAxis
           dataKey="name"
           tick={showXAxisLabels ? { fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY } : false}
@@ -329,22 +324,8 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
           cursor={{ fill: 'rgba(255,255,255,0.03)' }}
           wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
         />
-        <Bar
-          dataKey={legend1}
-          fill={color1}
-          radius={[4, 4, 0, 0]}
-          animationDuration={800}
-          animationEasing="ease-out"
-          maxBarSize={maxBarSize}
-        />
-        <Bar
-          dataKey={legend2}
-          fill={color2}
-          radius={[4, 4, 0, 0]}
-          animationDuration={800}
-          animationEasing="ease-out"
-          maxBarSize={maxBarSize}
-        />
+        <Bar dataKey={legend1} fill={color1} radius={[4, 4, 0, 0]} animationDuration={800} animationEasing="ease-out" maxBarSize={maxBarSize} />
+        <Bar dataKey={legend2} fill={color2} radius={[4, 4, 0, 0]} animationDuration={800} animationEasing="ease-out" maxBarSize={maxBarSize} />
       </RBarChart>
     </ResponsiveContainer>
   );

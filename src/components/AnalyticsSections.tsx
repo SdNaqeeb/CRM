@@ -319,6 +319,11 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
   const [schoolPrepData, setSchoolPrepData] = useState<TestPrepSchoolResponse | null>(null);
   const [schoolLoading, setSchoolLoading] = useState(false);
   const [prepError, setPrepError] = useState('');
+  // Avg chart filters (top 2 graphs)
+  const [avgClass, setAvgClass] = useState<string>('All');
+  const [avgSection, setAvgSection] = useState<string>('All');
+
+  // Individual student filters (bottom 2 graphs)
   const [selectedClass, setSelectedClass] = useState<string>('All');
   const [selectedSection, setSelectedSection] = useState<string>('All');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
@@ -353,25 +358,53 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
     [schoolPrepData]
   );
 
-  // Filter options built from test-prep summaries (class_name & section_name are populated)
-  const classOptions = React.useMemo(() => {
+  // Shared class list (used by both filter sets)
+  const allClassOptions = React.useMemo(() => {
     const classes = new Set(summaries.map((s) => s.className).filter((c) => c !== 'Unknown'));
     return ['All', ...Array.from(classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
   }, [summaries]);
 
+  // Avg chart filter options
+  const avgSectionOptions = React.useMemo(() => {
+    const base = avgClass === 'All' ? summaries : summaries.filter((s) => s.className === avgClass);
+    const sections = new Set(base.map((s) => s.section).filter((s) => s !== 'Unknown'));
+    return ['All', ...Array.from(sections).sort()];
+  }, [summaries, avgClass]);
+
+  // Individual student filter options
+  const classOptions = allClassOptions;
   const sectionOptions = React.useMemo(() => {
     const base = selectedClass === 'All' ? summaries : summaries.filter((s) => s.className === selectedClass);
     const sections = new Set(base.map((s) => s.section).filter((s) => s !== 'Unknown'));
     return ['All', ...Array.from(sections).sort()];
   }, [summaries, selectedClass]);
 
+  // Reset avg section when avg class changes
+  useEffect(() => { setAvgSection('All'); }, [avgClass]);
+
+  // Reset student section when student class changes
+  useEffect(() => { setSelectedSection('All'); }, [selectedClass]);
+
+  // Avg chart data: filtered by avgClass + avgSection (independent)
+  const avgFilteredSummaries = React.useMemo(() => {
+    let s = summaries;
+    if (avgClass !== 'All') s = s.filter((x) => x.className === avgClass);
+    if (avgSection !== 'All') s = s.filter((x) => x.section === avgSection);
+    return s;
+  }, [summaries, avgClass, avgSection]);
+
+  // Student dropdown scope: filtered by selectedClass + selectedSection
+  const filteredSummaries = React.useMemo(() => {
+    let s = summaries;
+    if (selectedClass !== 'All') s = s.filter((x) => x.className === selectedClass);
+    if (selectedSection !== 'All') s = s.filter((x) => x.section === selectedSection);
+    return s;
+  }, [summaries, selectedClass, selectedSection]);
+
   const studentOptions = React.useMemo(() => {
-    const base = summaries
-      .filter((s) => selectedClass === 'All' || s.className === selectedClass)
-      .filter((s) => selectedSection === 'All' || s.section === selectedSection);
     const seen = new Set<string>();
     const opts: { label: string; value: string }[] = [];
-    base.forEach((s) => {
+    filteredSummaries.forEach((s) => {
       if (!seen.has(s.username)) {
         seen.add(s.username);
         const item = schoolPrepData?.items.find((i) => i.username === s.username);
@@ -379,10 +412,7 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
       }
     });
     return opts.sort((a, b) => a.label.localeCompare(b.label));
-  }, [summaries, selectedClass, selectedSection, schoolPrepData]);
-
-  // Reset section when class changes
-  useEffect(() => { setSelectedSection('All'); }, [selectedClass]);
+  }, [filteredSummaries, schoolPrepData]);
 
   // Auto-select first student when options change
   useEffect(() => {
@@ -391,20 +421,8 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
     }
   }, [studentOptions, selectedStudent]);
 
-  // School-wide charts: filtered by selected class only (not section)
-  const classFilteredSummaries = React.useMemo(
-    () => selectedClass === 'All' ? summaries : summaries.filter((s) => s.className === selectedClass),
-    [summaries, selectedClass]
-  );
-
-  // Section-level filter (used for student dropdown scope)
-  const filteredSummaries = React.useMemo(
-    () => classFilteredSummaries.filter((s) => selectedSection === 'All' || s.section === selectedSection),
-    [classFilteredSummaries, selectedSection]
-  );
-
-  const subjectScoreData  = React.useMemo(() => buildSubjectScoreData(classFilteredSummaries), [classFilteredSummaries]);
-  const subjectTimeData   = React.useMemo(() => buildSubjectTimeData(classFilteredSummaries),  [classFilteredSummaries]);
+  const subjectScoreData  = React.useMemo(() => buildSubjectScoreData(avgFilteredSummaries), [avgFilteredSummaries]);
+  const subjectTimeData   = React.useMemo(() => buildSubjectTimeData(avgFilteredSummaries),  [avgFilteredSummaries]);
   const studentScoreData      = React.useMemo(() => buildStudentScoreData(summaries, selectedStudent),  [summaries, selectedStudent]);
   const studentTimeData       = React.useMemo(() => buildStudentTimeData(summaries, selectedStudent),   [summaries, selectedStudent]);
   const selectedStudentName   = studentOptions.find((o) => o.value === selectedStudent)?.label ?? '';
@@ -427,7 +445,7 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
               <path d="M3 12h18M3 6h18M3 18h18" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#F1F5F9', fontFamily: FONT_SERIF }}>
-              Test — Performance Analysis
+              Test Prep Analysis
             </h3>
           </div>
 
@@ -439,7 +457,26 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
             </div>
           ) : (
             <>
-              {/* School-wide averages — no filters */}
+              {/* Avg chart filters */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                {[
+                  { label: 'Class', value: avgClass, onChange: setAvgClass, options: allClassOptions, fmt: (c: string) => c === 'All' ? 'All Classes' : `Class ${c}` },
+                  { label: 'Section', value: avgSection, onChange: setAvgSection, options: avgSectionOptions, fmt: (s: string) => s === 'All' ? 'All Sections' : `Section ${s}` },
+                ].map(({ label, value, onChange, options, fmt }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#94A3B8' }}>{label}</span>
+                    <select
+                      value={value}
+                      onChange={(e) => onChange(e.target.value)}
+                      style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: 14 }}
+                    >
+                      {options.map((o) => <option key={o} value={o}>{fmt(o)}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+
+              {/* Avg charts */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 14, marginBottom: 28 }}>
                 <GroupedBarChart
                   title="Avg 1st Test vs Best Score by Subject"
