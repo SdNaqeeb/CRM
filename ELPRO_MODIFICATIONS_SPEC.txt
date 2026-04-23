@@ -1,0 +1,97 @@
+================================================================================
+ELPRO Analytics Dashboard Modifications — 2026-04-22
+================================================================================
+
+OBJECTIVE:
+Replace old Test Prep graphs with ELPRO-specific performance charts for Class 10.
+
+================================================================================
+CHANGES MADE:
+================================================================================
+
+1. REMOVED GRAPHS (5 charts):
+   - Average Test Prep Score by Class
+   - Overall Class Test Prep Score Trend
+   - Individual Student Test Prep — [Student Name]
+   - Student Correct / Incorrect / Skipped
+   - Time Spent vs Score
+
+2. ADDED GRAPHS (4 charts):
+
+   A. SCHOOL-WIDE AVERAGES (no filters):
+      - Avg 1st Test vs Best Score by Subject (grouped bar)
+        Shows: 1st Test Score % vs Best Score % for Math & Science
+      - Avg 1st Test vs Best Time by Subject (grouped bar)
+        Shows: 1st Test Time (sec) vs Best Time (sec) for Math & Science
+
+   B. PER-STUDENT ANALYSIS (with filters):
+      - Score: 1st Test vs Best Score (grouped bar)
+      - Speed: 1st Test vs Best Time (grouped bar)
+
+3. FILTERS ADDED:
+   - Class (dropdown, dynamically populated from API data)
+   - Section (cascading, filtered by selected Class)
+   - Student (cascading, filtered by Class + Section)
+
+   Layout: School-wide charts first (no filters) → Divider → Filters above student charts
+
+4. API CHANGES:
+   - Reduced fetch limit from 500 to 100 items (performance improvement)
+   - Data source: dashboardAPI.getTestPrepBySchoolCode()
+
+5. TIME CALCULATION LOGIC:
+   For each student per subject:
+   - First Time = time of their chronologically first attempt
+   - Best Time = minimum (fastest) time across all their attempts
+   Then averaged across all students per subject for display
+
+6. CHART FEATURES:
+   - All charts include X-axis labels showing subject/student names
+   - Grouped bar colors:
+     * Score: light blue (#93C5FD) vs dark blue (#1E3A5F)
+     * Time: orange (#f97316) vs yellow (#EAB308)
+   - Loading skeletons for async data
+   - Error handling for API failures
+
+================================================================================
+DATA STRUCTURE:
+================================================================================
+
+ElproStudentSummary interface:
+- username: string
+- className: string
+- section: string
+- subject: string (MATHEMATICS or SCIENCE)
+- firstScore: number (%)
+- bestScore: number (%)
+- improvement: number (%)
+- firstTime: number | null (seconds)
+- bestTime: number | null (seconds, minimum across all attempts)
+- attempts: number (count of attempts)
+
+================================================================================
+KNOWN ISSUES/NOTES:
+================================================================================
+
+1. Class field may not map correctly if API doesn't populate class_name
+   → Section filter may show all sections regardless of class
+   → Needs verification: check API response for class_name field structure
+
+2. Some students show identical 1st vs Best times (e.g., 186/186 sec)
+   → This is correct if student only attempted the subject once
+   → Different values appear when students have multi-attempt data
+
+3. Section B appearing for Class 10 when shouldn't exist
+   → Suggests class_name field is not coming through correctly from API
+   → Needs debug: inspect API response for actual class_name values
+
+================================================================================
+FILE LOCATIONS:
+================================================================================
+
+Component: src/components/AnalyticsSections.tsx
+Charts: src/components/AnalyticsCharts.tsx (updated with showXAxisLabels prop)
+Types: src/types/index.ts
+API: src/services/api.ts
+
+================================================================================

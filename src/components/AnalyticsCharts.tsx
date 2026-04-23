@@ -145,6 +145,7 @@ interface BarChartProps {
   height?: number;
   showValues?: boolean;
   valueLabel?: string;
+  showXAxisLabels?: boolean;
 }
 
 export const BarChart: React.FC<BarChartProps> = ({
@@ -153,6 +154,7 @@ export const BarChart: React.FC<BarChartProps> = ({
   height = 240,
   showValues = true,
   valueLabel = 'Count',
+  showXAxisLabels = false,
 }) => {
   const gradientId = React.useId?.() ?? `bar-grad-${title.replace(/\s/g, '')}`;
 
@@ -191,9 +193,10 @@ export const BarChart: React.FC<BarChartProps> = ({
           />
           <XAxis
             dataKey="name"
-            tick={false}
+            tick={showXAxisLabels ? { fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY } : false}
             axisLine={false}
             tickLine={false}
+            height={showXAxisLabels ? 28 : 0}
           />
           <YAxis
             tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}
@@ -251,6 +254,7 @@ interface GroupedBarChartProps {
   color2?: string;
   height?: number;
   minBarSlotWidth?: number;
+  showXAxisLabels?: boolean;
 }
 
 export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
@@ -262,6 +266,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
   color2 = COLORS.blue,
   height = 240,
   minBarSlotWidth,
+  showXAxisLabels = false,
 }) => {
   if (!data.length)
     return (
@@ -309,10 +314,10 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
         />
         <XAxis
           dataKey="name"
-          tick={false}
+          tick={showXAxisLabels ? { fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY } : false}
           axisLine={false}
           tickLine={false}
-          height={0}
+          height={showXAxisLabels ? 28 : 0}
         />
         <YAxis
           tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}

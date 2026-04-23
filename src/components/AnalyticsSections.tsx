@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BarChart, GroupedBarChart, LineChart, DAUWAUMAUCards, StackedBarChart } from './AnalyticsCharts';
+import { BarChart, GroupedBarChart, LineChart } from './AnalyticsCharts';
 import { useAuth } from '../context/AuthContext';
 import { dashboardAPI } from '../services/api';
 import { StudentEngagementSummary, OrcaLexSchoolSummary, EngagementStatus, TestPrepSchoolResponse, TestPrepItem } from '../types';
@@ -35,79 +35,7 @@ function simulateWeeklyTrend(
   return points;
 }
 
-// ─── Helper: compute usage vs academic improvement buckets ────────────────────
-function computeUsageVsImprovement(students: StudentEngagementSummary[]): { label: string; value: number }[] {
-  const buckets = [
-    { label: '0 hrs', min: 0, max: 0 },
-    { label: '1-2 hrs', min: 1, max: 2 },
-    { label: '3-5 hrs', min: 3, max: 5 },
-    { label: '6-10 hrs', min: 6, max: 10 },
-    { label: '11+ hrs', min: 11, max: Infinity },
-  ];
-
-  return buckets.map(bucket => {
-    const inBucket = students.filter(s => s.sessions_this_week >= bucket.min && s.sessions_this_week <= bucket.max);
-    const activeInBucket = inBucket.filter(s => s.engagement_status === EngagementStatus.ACTIVE).length;
-    const rate = inBucket.length > 0 ? Math.round((activeInBucket / inBucket.length) * 100) : 0;
-    return { label: bucket.label, value: rate };
-  });
-}
-
-function buildClassTestPrepTrend(items: TestPrepItem[]): { label: string; previousScore: number; latestScore: number }[] {
-  const grouped: Record<string, TestPrepItem[]> = {};
-  items.forEach((item) => {
-    const classKey = String(item.graph_data?.class_num ?? item.graph_data?.class ?? 'Unknown');
-    if (!grouped[classKey]) grouped[classKey] = [];
-    grouped[classKey].push(item);
-  });
-
-  return Object.entries(grouped)
-    .map(([classKey, classItems]) => {
-      const sortedItems = [...classItems].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      const latestItem = sortedItems[sortedItems.length - 1];
-      const latestScore = Number(latestItem.graph_data?.score_pct ?? latestItem.analysis?.analysis?.score_pct ?? latestItem.analysis?.prediction?.score_pct ?? 0);
-      const previousScores = sortedItems.slice(0, -1).map((item) =>
-        Number(item.graph_data?.score_pct ?? item.analysis?.analysis?.score_pct ?? item.analysis?.prediction?.score_pct ?? 0)
-      );
-      const previousScore = previousScores.length
-        ? Math.round(previousScores.reduce((sum, value) => sum + value, 0) / previousScores.length)
-        : 0;
-
-      return {
-        label: `Class ${classKey}`,
-        previousScore,
-        latestScore,
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
-}
-
-function buildAverageScoreByClass(items: TestPrepItem[]): { label: string; value: number }[] {
-  const grouped = new Map<string, { totalScore: number; count: number }>();
-
-  items.forEach((item) => {
-    const className = getTestPrepClass(item);
-    if (!className || className === 'Unknown') return;
-
-    const existing = grouped.get(className);
-    const score = getTestPrepScore(item);
-
-    if (existing) {
-      existing.totalScore += score;
-      existing.count += 1;
-      return;
-    }
-
-    grouped.set(className, { totalScore: score, count: 1 });
-  });
-
-  return Array.from(grouped.entries())
-    .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
-    .map(([className, bucket]) => ({
-      label: `Class ${className}`,
-      value: Math.round(bucket.totalScore / bucket.count),
-    }));
-}
+// ─── ELPRO helpers ────────────────────────────────────────────────────────────
 
 function getTestPrepScore(item: TestPrepItem): number {
   return Number(
@@ -122,14 +50,10 @@ function getTestPrepTimeSpentSec(item: TestPrepItem): number | null {
     item.analysis?.prediction?.time_spent_sec,
     item.prediction?.time_spent_sec,
   ];
-
-  for (const candidate of candidates) {
-    const value = Number(candidate);
-    if (Number.isFinite(value) && value > 0) {
-      return value;
-    }
+  for (const c of candidates) {
+    const v = Number(c);
+    if (Number.isFinite(v) && v > 0) return v;
   }
-
   return null;
 }
 
@@ -141,176 +65,113 @@ function getTestPrepSection(item: TestPrepItem): string {
   return String(item.section_name ?? item.graph_data?.section_name ?? item.graph_data?.section ?? 'Unknown');
 }
 
-function formatTestPrepDate(value: string, includeTime = false): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {}),
-  }).format(date);
+function getTestPrepSubject(item: TestPrepItem): string {
+  return String(item.graph_data?.subject ?? item.name ?? 'Unknown').toUpperCase();
 }
 
-function getTestPrepLabel(item: TestPrepItem): string {
-  return (
-    item.graph_data?.chapter_breakdown?.[0]?.chapter  ||
-    item.name ||
-    formatTestPrepDate(item.created_at, true)
-  );
+interface ElproStudentSummary {
+  username: string;
+  className: string;
+  section: string;
+  subject: string;
+  firstScore: number;
+  bestScore: number;
+  improvement: number;
+  firstTime: number | null;
+  bestTime: number | null;
+  attempts: number;
 }
 
-function getTestPrepChartKey(item: TestPrepItem, index: number): string {
-  return `${item.id}-${new Date(item.created_at).getTime()}-${index}`;
-}
-
-function formatTimeSpent(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '0s';
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-
-  const minutes = seconds / 60;
-  if (minutes < 10) return `${minutes.toFixed(1)}m`;
-  return `${Math.round(minutes)}m`;
-}
-
-function computePearsonCorrelation(points: Array<{ x: number; y: number }>): number | null {
-  const validPoints = points.filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-  const n = validPoints.length;
-
-  if (n < 2) return null;
-
-  const sumX = validPoints.reduce((sum, point) => sum + point.x, 0);
-  const sumY = validPoints.reduce((sum, point) => sum + point.y, 0);
-  const sumXY = validPoints.reduce((sum, point) => sum + point.x * point.y, 0);
-  const sumX2 = validPoints.reduce((sum, point) => sum + point.x * point.x, 0);
-  const sumY2 = validPoints.reduce((sum, point) => sum + point.y * point.y, 0);
-
-  const numerator = n * sumXY - sumX * sumY;
-  const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-
-  if (denominator === 0) return null;
-
-  return numerator / denominator;
-}
-
-function buildOverallTestPrepTrend(
-  items: TestPrepItem[]
-): { label: string; value: number; examCount: number; studentCount: number }[] {
-  const grouped = new Map<string, { timestamp: number; totalScore: number; count: number; students: Set<string> }>();
+function buildElproSummaries(items: TestPrepItem[]): ElproStudentSummary[] {
+  const grouped = new Map<string, {
+    className: string;
+    section: string;
+    subject: string;
+    attempts: { score: number; time: number | null; date: number }[];
+  }>();
 
   items.forEach((item) => {
-    const createdAt = new Date(item.created_at);
-    if (Number.isNaN(createdAt.getTime())) return;
-
-    const dayKey = createdAt.toISOString().slice(0, 10);
-    const existing = grouped.get(dayKey);
-    const score = getTestPrepScore(item);
-
-    if (existing) {
-      existing.totalScore += score;
-      existing.count += 1;
-      existing.students.add(item.username || String(item.student_id));
-      return;
+    const subject = getTestPrepSubject(item);
+    const key = `${item.username}|${subject}`;
+    if (!grouped.has(key)) {
+      grouped.set(key, { className: getTestPrepClass(item), section: getTestPrepSection(item), subject, attempts: [] });
     }
-
-    grouped.set(dayKey, {
-      timestamp: createdAt.getTime(),
-      totalScore: score,
-      count: 1,
-      students: new Set([item.username || String(item.student_id)]),
+    grouped.get(key)!.attempts.push({
+      score: getTestPrepScore(item),
+      time: getTestPrepTimeSpentSec(item),
+      date: new Date(item.created_at).getTime(),
     });
   });
 
-  return Array.from(grouped.entries())
-    .sort((a, b) => a[1].timestamp - b[1].timestamp)
-    .map(([dayKey, bucket]) => ({
-      label: formatTestPrepDate(dayKey),
-      value: Math.round(bucket.totalScore / bucket.count),
-      examCount: bucket.count,
-      studentCount: bucket.students.size,
-    }));
-}
-
-function buildStudentAttemptScoreTrend(items: TestPrepItem[]): { label: string; chartKey: string; value: number }[] {
-  return items
-    .slice()
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    .map((item, index) => ({
-      label: getTestPrepLabel(item),
-      chartKey: getTestPrepChartKey(item, index),
-      value: getTestPrepScore(item),
-    }));
-}
-
-function buildStudentAttemptBreakdown(
-  items: TestPrepItem[]
-): { label: string; chartKey: string; Correct: number; Incorrect: number; Skipped: number }[] {
-  return items
-    .slice()
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    .map((item, index) => {
-      const correct = Number(item.graph_data?.correct ?? item.analysis?.analysis?.correct ?? 0);
-      const total = Number(
-        item.graph_data?.total ?? item.analysis?.analysis?.total ?? item.questions?.length ?? 0
-      );
-      const skipped = Number(item.graph_data?.skipped ?? 0);
-      const incorrect = Math.max(total - correct - skipped, 0);
-
-      return {
-        label: getTestPrepLabel(item),
-        chartKey: getTestPrepChartKey(item, index),
-        Correct: correct,
-        Incorrect: incorrect,
-        Skipped: skipped,
-      };
+  const summaries: ElproStudentSummary[] = [];
+  grouped.forEach((record, key) => {
+    record.attempts.sort((a, b) => a.date - b.date);
+    const first = record.attempts[0];
+    const bestScoreAttempt = record.attempts.reduce((b, a) => (a.score > b.score ? a : b), first);
+    const validTimes = record.attempts.map((a) => a.time).filter((t): t is number => t !== null);
+    const bestTime = validTimes.length > 0 ? Math.min(...validTimes) : null;
+    summaries.push({
+      username: key.split('|')[0],
+      className: record.className,
+      section: record.section,
+      subject: record.subject,
+      firstScore: first.score,
+      bestScore: bestScoreAttempt.score,
+      improvement: bestScoreAttempt.score - first.score,
+      firstTime: first.time,
+      bestTime,
+      attempts: record.attempts.length,
     });
+  });
+  return summaries;
 }
 
-function buildStudentTimeSpentCorrelationData(items: TestPrepItem[]): {
-  points: Array<{
-    label: string;
-    chartKey: string;
-    takenOn: string;
-    timeSpentSec: number;
-    timeLabel: string;
-    value: number;
-  }>;
-  correlation: number | null;
-} {
-  const getResolvedTimeSpentSec = (item: TestPrepItem): number => {
-    return getTestPrepTimeSpentSec(item) ?? 0;
-  };
+function avg(values: number[]): number {
+  return values.length ? Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10 : 0;
+}
 
-  const points = items
-    .slice()
-    .sort((a, b) => {
-      const timeA = getResolvedTimeSpentSec(a);
-      const timeB = getResolvedTimeSpentSec(b);
-      if (timeA !== timeB) return timeA - timeB;
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    })
-    .map((item, index) => {
-      const timeSpentSec = getResolvedTimeSpentSec(item);
-      return {
-        label: getTestPrepLabel(item),
-        chartKey: getTestPrepChartKey(item, index),
-        takenOn: formatTestPrepDate(item.created_at, true),
-        timeSpentSec,
-        timeLabel: formatTimeSpent(timeSpentSec),
-        value: getTestPrepScore(item),
-      };
-    });
+function toLabel(subject: string): string {
+  return subject.charAt(0) + subject.slice(1).toLowerCase();
+}
 
-  return {
-    points,
-    correlation: computePearsonCorrelation(
-      points.map((point) => ({
-        x: point.timeSpentSec,
-        y: point.value,
-      }))
-    ),
-  };
+function buildSubjectScoreData(summaries: ElproStudentSummary[]) {
+  const map = new Map<string, { first: number[]; best: number[] }>();
+  summaries.forEach((s) => {
+    if (s.subject === 'UNKNOWN') return;
+    if (!map.has(s.subject)) map.set(s.subject, { first: [], best: [] });
+    map.get(s.subject)!.first.push(s.firstScore);
+    map.get(s.subject)!.best.push(s.bestScore);
+  });
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([subject, d]) => ({ label: toLabel(subject), value1: avg(d.first), value2: avg(d.best) }));
+}
+
+function buildSubjectTimeData(summaries: ElproStudentSummary[]) {
+  const map = new Map<string, { first: number[]; best: number[] }>();
+  summaries.forEach((s) => {
+    if (s.subject === 'UNKNOWN' || s.firstTime === null || s.bestTime === null) return;
+    if (!map.has(s.subject)) map.set(s.subject, { first: [], best: [] });
+    map.get(s.subject)!.first.push(s.firstTime!);
+    map.get(s.subject)!.best.push(s.bestTime!);
+  });
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([subject, d]) => ({ label: toLabel(subject), value1: avg(d.first), value2: avg(d.best) }));
+}
+
+function buildStudentScoreData(summaries: ElproStudentSummary[], username: string) {
+  return summaries
+    .filter((s) => s.username === username && s.subject !== 'UNKNOWN')
+    .sort((a, b) => a.subject.localeCompare(b.subject))
+    .map((s) => ({ label: toLabel(s.subject), value1: s.firstScore, value2: s.bestScore }));
+}
+
+function buildStudentTimeData(summaries: ElproStudentSummary[], username: string) {
+  return summaries
+    .filter((s) => s.username === username && s.subject !== 'UNKNOWN' && s.firstTime !== null && s.bestTime !== null)
+    .sort((a, b) => a.subject.localeCompare(b.subject))
+    .map((s) => ({ label: toLabel(s.subject), value1: s.firstTime as number, value2: s.bestTime as number }));
 }
 
 // ─── Shared section wrapper (dark theme) ─────────────────────────────────────
@@ -346,29 +207,6 @@ const ChartGrid: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const FullWidthRow: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div style={{ gridColumn: '1 / -1', marginBottom: 10 }}>{children}</div>
 );
-
-// ─── Insight text component ──────────────────────────────────────────────────
-const UsageInsight: React.FC<{ data: { label: string; value: number }[] }> = ({ data }) => {
-  const nonZeroBuckets = data.filter(d => d.value > 0);
-  if (nonZeroBuckets.length < 2) return null;
-  const maxRate = Math.max(...data.map(d => d.value));
-  const minRate = Math.min(...data.filter(d => d.value > 0).map(d => d.value));
-  const diff = maxRate - minRate;
-  return (
-    <p
-      style={{
-        fontSize: 13,
-        color: '#94A3B8',
-        marginTop: 8,
-        marginBottom: 0,
-        fontFamily: FONT,
-        fontStyle: 'italic',
-      }}
-    >
-      Students with higher usage show {diff}% better engagement
-    </p>
-  );
-};
 
 // ─── Loading skeleton component ──────────────────────────────────────────────
 const ChartLoadingSkeleton: React.FC<{ height?: number }> = ({ height = 240 }) => (
@@ -479,75 +317,11 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
   const schoolCode = user?.school_code;
   const lastSchoolPrepRequestRef = useRef<string | null>(null);
   const [schoolPrepData, setSchoolPrepData] = useState<TestPrepSchoolResponse | null>(null);
-  const [studentPrepData, setStudentPrepData] = useState<TestPrepSchoolResponse | null>(null);
-  const [selectedStudentUsername, setSelectedStudentUsername] = useState<string>('');
-  const [selectedClassForGraphs, setSelectedClassForGraphs] = useState<string>('All');
-  const [selectedSectionForGraphs, setSelectedSectionForGraphs] = useState<string>('All');
   const [schoolLoading, setSchoolLoading] = useState(false);
-  const [studentLoading, setStudentLoading] = useState(false);
   const [prepError, setPrepError] = useState('');
-
-  const classOptions = React.useMemo(() => {
-    if (!schoolPrepData?.items) return ['All'];
-    const classes = new Set<string>();
-    schoolPrepData.items.forEach((item) => {
-      const className = getTestPrepClass(item);
-      if (className && className !== 'Unknown') {
-        classes.add(className);
-      }
-    });
-    return ['All', ...Array.from(classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
-  }, [schoolPrepData]);
-
-  const sectionOptions = React.useMemo(() => {
-    if (!schoolPrepData?.items) return ['All'];
-
-    const sections = new Set<string>();
-    schoolPrepData.items
-      .filter((item) => selectedClassForGraphs === 'All' ? true : getTestPrepClass(item) === selectedClassForGraphs)
-      .forEach((item) => {
-        const sectionName = getTestPrepSection(item);
-        if (sectionName && sectionName !== 'Unknown') {
-          sections.add(sectionName);
-        }
-      });
-
-    return ['All', ...Array.from(sections).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
-  }, [schoolPrepData, selectedClassForGraphs]);
-
-  const studentOptions = React.useMemo(() => {
-    if (!schoolPrepData?.items) return [];
-    const seen = new Set<string>();
-    return schoolPrepData.items
-      .filter((item) => selectedClassForGraphs === 'All' ? true : getTestPrepClass(item) === selectedClassForGraphs)
-      .filter((item) => selectedSectionForGraphs === 'All' ? true : getTestPrepSection(item) === selectedSectionForGraphs)
-      .reduce<{ label: string; value: string }[]>((acc, item) => {
-        if (item.username && !seen.has(item.username)) {
-          seen.add(item.username);
-          acc.push({ label: item.student_name || item.username, value: item.username });
-        }
-        return acc;
-      }, []);
-  }, [schoolPrepData, selectedClassForGraphs, selectedSectionForGraphs]);
-
-  const selectedStudentName = React.useMemo(() => {
-    return studentOptions.find((opt) => opt.value === selectedStudentUsername)?.label || 'Student';
-  }, [studentOptions, selectedStudentUsername]);
-
-  useEffect(() => {
-    setSelectedSectionForGraphs('All');
-  }, [selectedClassForGraphs]);
-
-  useEffect(() => {
-    if (!studentOptions.length) {
-      setSelectedStudentUsername('');
-      return;
-    }
-
-    if (!studentOptions.some((option) => option.value === selectedStudentUsername)) {
-      setSelectedStudentUsername(studentOptions[0].value);
-    }
-  }, [studentOptions, selectedStudentUsername]);
+  const [selectedClass, setSelectedClass] = useState<string>('All');
+  const [selectedSection, setSelectedSection] = useState<string>('All');
+  const [selectedStudent, setSelectedStudent] = useState<string>('');
 
   // Fetch school data only when schoolCode changes
   useEffect(() => {
@@ -559,8 +333,7 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
       try {
         setSchoolLoading(true);
         setPrepError('');
-
-        const schoolResponse = await dashboardAPI.getTestPrepBySchoolCode(schoolCode, 500);
+        const schoolResponse = await dashboardAPI.getTestPrepBySchoolCode(schoolCode, 100);
         setSchoolPrepData(schoolResponse);
       } catch (err) {
         console.error('Failed to load test prep analytics:', err);
@@ -575,138 +348,69 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
     fetchSchoolPrepData();
   }, [schoolCode]);
 
-  // Fetch student data when schoolCode or selectedStudentUsername changes
-  useEffect(() => {
-    if (!schoolCode || !selectedStudentUsername) {
-      setStudentPrepData(null);
-      return;
-    }
+  const summaries = React.useMemo(
+    () => (schoolPrepData?.items ? buildElproSummaries(schoolPrepData.items) : []),
+    [schoolPrepData]
+  );
 
-    const fetchStudentPrepData = async () => {
-      try {
-        setStudentLoading(true);
-        setPrepError('');
+  // Filter options built from test-prep summaries (class_name & section_name are populated)
+  const classOptions = React.useMemo(() => {
+    const classes = new Set(summaries.map((s) => s.className).filter((c) => c !== 'Unknown'));
+    return ['All', ...Array.from(classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+  }, [summaries]);
 
-        const studentResponse = await dashboardAPI.getTestPrepByUsernameSchoolCode(
-          schoolCode,
-          selectedStudentUsername,
-          100
-        );
-        setStudentPrepData(studentResponse);
-      } catch (err) {
-        console.error('Failed to load student test prep analytics:', err);
-        setPrepError('Unable to load student test prep analytics at this time.');
-        setStudentPrepData(null);
-      } finally {
-        setStudentLoading(false);
+  const sectionOptions = React.useMemo(() => {
+    const base = selectedClass === 'All' ? summaries : summaries.filter((s) => s.className === selectedClass);
+    const sections = new Set(base.map((s) => s.section).filter((s) => s !== 'Unknown'));
+    return ['All', ...Array.from(sections).sort()];
+  }, [summaries, selectedClass]);
+
+  const studentOptions = React.useMemo(() => {
+    const base = summaries
+      .filter((s) => selectedClass === 'All' || s.className === selectedClass)
+      .filter((s) => selectedSection === 'All' || s.section === selectedSection);
+    const seen = new Set<string>();
+    const opts: { label: string; value: string }[] = [];
+    base.forEach((s) => {
+      if (!seen.has(s.username)) {
+        seen.add(s.username);
+        const item = schoolPrepData?.items.find((i) => i.username === s.username);
+        opts.push({ label: item?.student_name || s.username, value: s.username });
       }
-    };
+    });
+    return opts.sort((a, b) => a.label.localeCompare(b.label));
+  }, [summaries, selectedClass, selectedSection, schoolPrepData]);
 
-    fetchStudentPrepData();
-  }, [schoolCode, selectedStudentUsername]);
+  // Reset section when class changes
+  useEffect(() => { setSelectedSection('All'); }, [selectedClass]);
 
-  // Class-wise grouped bar chart
-  const gradeMap: Record<string, { active: number; inactiveAtRisk: number }> = {};
-  students.forEach((s) => {
-    const grade = s.grade || 'Unknown';
-    if (!gradeMap[grade]) gradeMap[grade] = { active: 0, inactiveAtRisk: 0 };
-    if (s.engagement_status === EngagementStatus.ACTIVE) {
-      gradeMap[grade].active++;
-    } else if (
-      s.engagement_status === EngagementStatus.INACTIVE ||
-      s.engagement_status === EngagementStatus.AT_RISK
-    ) {
-      gradeMap[grade].inactiveAtRisk++;
+  // Auto-select first student when options change
+  useEffect(() => {
+    if (studentOptions.length && !studentOptions.find((o) => o.value === selectedStudent)) {
+      setSelectedStudent(studentOptions[0].value);
     }
-  });
+  }, [studentOptions, selectedStudent]);
 
-  const classWiseData = Object.entries(gradeMap)
-    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-    .map(([grade, counts]) => ({
-      label: `Class ${grade}`,
-      value1: counts.active,
-      value2: counts.inactiveAtRisk,
-    }));
+  // School-wide charts: filtered by selected class only (not section)
+  const classFilteredSummaries = React.useMemo(
+    () => selectedClass === 'All' ? summaries : summaries.filter((s) => s.className === selectedClass),
+    [summaries, selectedClass]
+  );
 
-  // Engagement trend data
-  const totalSessionsAll = students.reduce((sum, s) => sum + s.total_sessions, 0);
-  const sessionsThisWeekAll = students.reduce((sum, s) => sum + s.sessions_this_week, 0);
-  const trendData = simulateWeeklyTrend(sessionsThisWeekAll, totalSessionsAll);
-  const trendLabel = trend === 'up' ? 'Improving' : trend === 'down' ? 'Declining' : 'Stable';
-  const trendColor = trend === 'up' ? '#10B981' : trend === 'down' ? '#F43F5E' : '#F59E0B';
+  // Section-level filter (used for student dropdown scope)
+  const filteredSummaries = React.useMemo(
+    () => classFilteredSummaries.filter((s) => selectedSection === 'All' || s.section === selectedSection),
+    [classFilteredSummaries, selectedSection]
+  );
 
-  const classScoreData = React.useMemo(() => {
-    if (!schoolPrepData?.items) return [];
-    return buildAverageScoreByClass(
-      schoolPrepData.items
-        .filter((item) => getTestPrepClass(item) !== 'Unknown')
-        .filter((item) => selectedClassForGraphs === 'All' ? true : getTestPrepClass(item) === selectedClassForGraphs)
-        .filter((item) => selectedSectionForGraphs === 'All' ? true : getTestPrepSection(item) === selectedSectionForGraphs)
-    );
-  }, [schoolPrepData, selectedClassForGraphs, selectedSectionForGraphs]);
-
-  const testPrepTrendData = React.useMemo(() => {
-    if (!schoolPrepData?.items) return [];
-
-    const filteredItems =
-      schoolPrepData.items
-        .filter((item) => selectedClassForGraphs === 'All' ? true : getTestPrepClass(item) === selectedClassForGraphs)
-        .filter((item) => selectedSectionForGraphs === 'All' ? true : getTestPrepSection(item) === selectedSectionForGraphs);
-
-    return buildOverallTestPrepTrend(filteredItems);
-  }, [schoolPrepData, selectedClassForGraphs, selectedSectionForGraphs]);
-
-  const studentScoreTrendData = React.useMemo(() => {
-    return studentPrepData?.items ? buildStudentAttemptScoreTrend(studentPrepData.items) : [];
-  }, [studentPrepData]);
-
-  const studentTestPrepData = React.useMemo(() => {
-    return studentPrepData?.items ? buildStudentAttemptBreakdown(studentPrepData.items) : [];
-  }, [studentPrepData]);
-
-  const studentTimeScoreCorrelation = React.useMemo(() => {
-    if (!studentPrepData?.items) {
-      return { points: [], correlation: null as number | null };
-    }
-
-    return buildStudentTimeSpentCorrelationData(studentPrepData.items);
-  }, [studentPrepData]);
-
-  const filteredSchoolPrepItems = React.useMemo(() => {
-    if (!schoolPrepData?.items) return [];
-
-    return selectedClassForGraphs === 'All'
-      ? schoolPrepData.items.filter((item) => selectedSectionForGraphs === 'All' ? true : getTestPrepSection(item) === selectedSectionForGraphs)
-      : schoolPrepData.items
-          .filter((item) => getTestPrepClass(item) === selectedClassForGraphs)
-          .filter((item) => selectedSectionForGraphs === 'All' ? true : getTestPrepSection(item) === selectedSectionForGraphs);
-  }, [schoolPrepData, selectedClassForGraphs, selectedSectionForGraphs]);
-
-  const overallTrendSummary = React.useMemo(() => {
-    const uniqueStudents = new Set(
-      filteredSchoolPrepItems.map((item) => item.username || String(item.student_id))
-    );
-
-    return {
-      examCount: filteredSchoolPrepItems.length,
-      studentCount: uniqueStudents.size,
-    };
-  }, [filteredSchoolPrepItems]);
+  const subjectScoreData  = React.useMemo(() => buildSubjectScoreData(classFilteredSummaries), [classFilteredSummaries]);
+  const subjectTimeData   = React.useMemo(() => buildSubjectTimeData(classFilteredSummaries),  [classFilteredSummaries]);
+  const studentScoreData      = React.useMemo(() => buildStudentScoreData(summaries, selectedStudent),  [summaries, selectedStudent]);
+  const studentTimeData       = React.useMemo(() => buildStudentTimeData(summaries, selectedStudent),   [summaries, selectedStudent]);
+  const selectedStudentName   = studentOptions.find((o) => o.value === selectedStudent)?.label ?? '';
 
   return (
     <SectionWrapper>
-      {/* <ChartGrid>
-        <GroupedBarChart
-          title="Class Performance Overview"
-          data={classWiseData}
-          legend1="Active"
-          legend2="Inactive/At-Risk"
-          color1="#059669"
-          color2="#e11d48"
-        />
-        <LineChart title={`Engagement Trend `} data={trendData} color={trendColor} />
-      </ChartGrid> */}
-
       <FullWidthRow>
         <div
           style={{
@@ -717,264 +421,101 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
             background: '#111827',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
             <svg width="20" height="20" fill="none" stroke="#8B5CF6" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M3 12h18M3 6h18M3 18h18" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 18,
-                fontWeight: 700,
-                color: '#F1F5F9',
-                fontFamily: FONT_SERIF,
-              }}
-            >
-              Test Prep Analysis
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#F1F5F9', fontFamily: FONT_SERIF }}>
+              ELPRO — Performance Analysis
             </h3>
-            
           </div>
 
           {prepError ? (
             <div style={{ color: '#F43F5E', fontSize: 14 }}>{prepError}</div>
+          ) : schoolLoading ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 14 }}>
+              {Array.from({ length: 4 }).map((_, i) => <ChartLoadingSkeleton key={i} />)}
+            </div>
           ) : (
             <>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  marginBottom: 16,
-                  alignItems: 'flex-end',
-                }}
-              >
-                <div style={{ flex: '1 1 320px', minWidth: 260 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: '#94A3B8' }}>
-                    Filter school test prep analytics by class and section, then choose a student below for individual analysis.
-                  </p>
-                </div>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                    gap: 12,
-                    flex: '0 1 420px',
-                    width: '100%',
-                    maxWidth: 420,
-                  }}
-                >
-                <div style={{ minWidth: 0 }}>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#94A3B8' }}>
-                    Class
-                  </label>
+              {/* School-wide averages — no filters */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 14, marginBottom: 28 }}>
+                <GroupedBarChart
+                  title="Avg 1st Test vs Best Score by Subject"
+                  data={subjectScoreData}
+                  legend1="Avg 1st Test Score (%)"
+                  legend2="Avg Best Score (%)"
+                  color1="#93C5FD"
+                  color2="#1E3A5F"
+                   
+                />
+                <GroupedBarChart
+                  title="Avg 1st Test vs Best Time by Subject (sec)"
+                  data={subjectTimeData}
+                  legend1="Avg 1st Test Time (sec)"
+                  legend2="Avg Best Time (sec)"
+                  color1="#f97316"
+                  color2="#EAB308"
+                   
+                />
+              </div>
+
+              {/* Divider */}
+              <div style={{ borderTop: '1px solid #1E293B', marginBottom: 20 }} />
+
+              {/* 3 filters above student charts */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+                {[
+                  { label: 'Class', value: selectedClass, onChange: (v: string) => setSelectedClass(v), options: classOptions, fmt: (c: string) => c === 'All' ? 'All Classes' : `Class ${c}` },
+                  { label: 'Section', value: selectedSection, onChange: (v: string) => setSelectedSection(v), options: sectionOptions, fmt: (s: string) => s === 'All' ? 'All Sections' : `Section ${s}` },
+                ].map(({ label, value, onChange, options, fmt }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#94A3B8' }}>{label}</span>
+                    <select
+                      value={value}
+                      onChange={(e) => onChange(e.target.value)}
+                      style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: 14 }}
+                    >
+                      {options.map((o) => <option key={o} value={o}>{fmt(o)}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, color: '#94A3B8' }}>Student</span>
                   <select
-                    value={selectedClassForGraphs}
-                    onChange={(e) => setSelectedClassForGraphs(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: '1px solid #334155',
-                      background: '#0F172A',
-                      color: '#F1F5F9',
-                      fontSize: 14,
-                    }}
+                    value={selectedStudent}
+                    onChange={(e) => setSelectedStudent(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: 14, maxWidth: 220 }}
                   >
-                    {classOptions.map((classOption) => (
-                      <option key={classOption} value={classOption}>
-                        {classOption}
-                      </option>
-                    ))}
+                    {studentOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#94A3B8' }}>
-                    Section
-                  </label>
-                  <select
-                    value={selectedSectionForGraphs}
-                    onChange={(e) => setSelectedSectionForGraphs(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: '1px solid #334155',
-                      background: '#0F172A',
-                      color: '#F1F5F9',
-                      fontSize: 14,
-                    }}
-                  >
-                    {sectionOptions.map((sectionOption) => (
-                      <option key={sectionOption} value={sectionOption}>
-                        {sectionOption}
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-                  gap: 14,
-                }}
-              >
-                <div style={{ gridColumn: '1 / -1', marginBottom: 4 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: '#94A3B8' }}>
-                    {overallTrendSummary.studentCount} students attempted {overallTrendSummary.examCount} exams
-                    {selectedClassForGraphs !== 'All' ? ` in Class ${selectedClassForGraphs}` : ''}
-                    {selectedSectionForGraphs !== 'All' ? ` Section ${selectedSectionForGraphs}` : ''}.
-                  </p>
-                </div>
-                {schoolLoading ? (
-                  <ChartLoadingSkeleton />
-                ) : (
-                  <BarChart
-                    title="Average Test Prep Score by Class"
-                    data={classScoreData}
-                    showValues
-                    valueLabel="Score %"
+              {/* Per-student charts */}
+              {selectedStudent && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 14 }}>
+                  <GroupedBarChart
+                    title={`Score: 1st Test vs Best Score — ${selectedStudentName}`}
+                    data={studentScoreData}
+                    legend1="1st Test Score (%)"
+                    legend2="Best Score (%)"
+                    color1="#3b82f6"
+                    color2="#4CAF50"
+                     
                   />
-                )}
-                {schoolLoading ? (
-                  <ChartLoadingSkeleton />
-                ) : (
-                  <LineChart
-                    title="Overall Class Test Prep Score Trend"
-                    data={testPrepTrendData}
-                    color="#8B5CF6"
-                    tooltipLabelFormatter={(value) => {
-                      const match = testPrepTrendData.find((item) => item.label === value);
-                      if (!match) return String(value);
-                      return `${match.label} • ${match.studentCount} students • ${match.examCount} exams`;
-                    }}
+                  <GroupedBarChart
+                    title={`Speed: 1st Test vs Best Time — ${selectedStudentName}`}
+                    data={studentTimeData}
+                    legend1="1st Test Time (sec)"
+                    legend2="Best Time (sec)"
+                    color1="#f97316"
+                    color2="#EAB308"
+                     
                   />
-                )}
-              </div>
-
-              <div style={{ marginTop: 20 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'flex-start',
-                    gap: 12,
-                    flexWrap: 'wrap',
-                    marginBottom: 16,
-                  }}
-                >
-                  {studentOptions.length > 0 ? (
-                    <div style={{ minWidth: 240 }}>
-                      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#94A3B8' }}>
-                        Select Student
-                      </label>
-                      <select
-                        value={selectedStudentUsername}
-                        onChange={(e) => setSelectedStudentUsername(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 12,
-                          border: '1px solid #334155',
-                          background: '#0F172A',
-                          color: '#F1F5F9',
-                          fontSize: 14,
-                        }}
-                      >
-                        {studentOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div style={{ minWidth: 240, color: '#94A3B8', fontSize: 13 }}>
-                      No students found for the selected class and section.
-                    </div>
-                  )}
                 </div>
-                <h4
-                  style={{
-                    margin: '0 0 10px',
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: '#F1F5F9',
-                    fontFamily: FONT_SERIF,
-                  }}
-                >
-                  Individual Student Test Prep — {selectedStudentName}
-                </h4>
-               
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-                    gap: 14,
-                  }}
-                >
-                  {/* {studentLoading ? (
-                    <ChartLoadingSkeleton />
-                  ) : (
-                    <LineChart
-                      title="Student Score Trend"
-                      data={studentScoreTrendData}
-                      color="#10B981"
-                      xDataKey="chartKey"
-                      tooltipLabelFormatter={(value) => {
-                        const match = studentScoreTrendData.find((item) => item.chartKey === value);
-                        return match?.label ?? String(value);
-                      }}
-                    />
-                  )} */}
-                  {studentLoading ? (
-                    <ChartLoadingSkeleton />
-                  ) : (
-                    <StackedBarChart
-                      title="Student Correct / Incorrect / Skipped"
-                      data={studentTestPrepData}
-                      xDataKey="chartKey"
-                      xTickFormatter={(value) => {
-                        const match = studentTestPrepData.find((item) => item.chartKey === value);
-                        return match?.label ?? String(value);
-                      }}
-                      tooltipLabelFormatter={(value) => {
-                        const match = studentTestPrepData.find((item) => item.chartKey === value);
-                        return match?.label ?? String(value);
-                      }}
-                      segments={[
-                        { key: 'Correct', label: 'Correct', color: '#10B981' },
-                        { key: 'Incorrect', label: 'Incorrect', color: '#e11d48' },
-                        { key: 'Skipped', label: 'Skipped', color: '#f59e0b' },
-                      ]}
-                    />
-                  )}
-                  {studentLoading ? (
-                    <ChartLoadingSkeleton />
-                  ) : (
-                    <LineChart
-                      title={`Time Spent vs Score`}
-                      data={studentTimeScoreCorrelation.points}
-                      color="#F59E0B"
-                      xDataKey="chartKey"
-                      showXAxisTicks
-                      xTickFormatter={(value) => {
-                        const match = studentTimeScoreCorrelation.points.find((item) => item.chartKey === value);
-                        return match?.timeLabel ?? String(value);
-                      }}
-                      tooltipLabelFormatter={(value) => {
-                        const match = studentTimeScoreCorrelation.points.find((item) => item.chartKey === value);
-                        return match
-                          ? `${match.label} • ${match.takenOn} • Time ${match.timeLabel}`
-                          : String(value);
-                      }}
-                      tooltipValueFormatter={(value) => [String(value), 'Score %']}
-                    />
-                  )}
-                </div>
-              </div>
+              )}
             </>
           )}
         </div>
