@@ -35,7 +35,7 @@ function simulateWeeklyTrend(
   return points;
 }
 
-// ─── ELPRO helpers ────────────────────────────────────────────────────────────
+// ─── Test helpers ────────────────────────────────────────────────────────────
 
 function getTestPrepScore(item: TestPrepItem): number {
   return Number(
@@ -333,7 +333,7 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
       try {
         setSchoolLoading(true);
         setPrepError('');
-        const schoolResponse = await dashboardAPI.getTestPrepBySchoolCode(schoolCode, 100);
+        const schoolResponse = await dashboardAPI.getTestPrepBySchoolCode(schoolCode, 500);
         setSchoolPrepData(schoolResponse);
       } catch (err) {
         console.error('Failed to load test prep analytics:', err);
@@ -427,7 +427,7 @@ export const SchoolAnalytics: React.FC<SchoolAnalyticsProps> = ({ students, tren
               <path d="M3 12h18M3 6h18M3 18h18" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#F1F5F9', fontFamily: FONT_SERIF }}>
-              ELPRO — Performance Analysis
+              Test — Performance Analysis
             </h3>
           </div>
 
