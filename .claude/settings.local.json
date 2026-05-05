@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python test_dummy_data.py)"
+    ]
+  }
+}
