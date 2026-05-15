@@ -1,0 +1,144 @@
+================================================================================
+SLIDE 1 — TEACHER DASHBOARD
+================================================================================
+
+OVERVIEW
+--------
+Personalized dashboard for a teacher to monitor and engage with their assigned
+students. Scoped to the logged-in teacher's student roster.
+
+
+METRICS CARDS
+-------------
+- Total Students        — total count in the teacher's roster
+- Active Students       — students active this period
+- Active Sessions       — currently live sessions
+- At-Risk Students      — students flagged as at risk
+- Inactive Students     — students with no recent login
+
+
+STUDENT TRACK GRID
+------------------
+- Visual grid showing each student's current learning track status
+- Scoped to the teacher's school code and username
+
+
+TABS
+----
+1. Students
+   - Full student table with name, grade, section, login info
+   - Day filter: All / Today / 1 Day / 2 Days / 7 Days
+   - Row-level checkboxes for bulk selection
+
+2. Daily Quizzes
+   - Lists all MCQ quiz homeworks assigned by the teacher
+   - Columns: Title, Subject, Chapters, Assigned Date, Due Date, Submissions
+   - Click a quiz to drill down into individual student submissions
+   - Submission detail: Student name, class, section, submitted-at timestamp
+
+3. Weekly Exams
+   - Lists all exams created by the teacher
+   - Select an exam to view per-student attempt records
+
+4. JEE Format
+   - Results for JEE-format mock exams (loaded from mock data)
+
+5. Pre-Assessment
+   - Per-student test prep summary filtered by:
+     Chapter / Class / Section / Min Attempts / Min Score (%)
+   - Table columns: Student, Class, Chapters, Attempts, Best Score, Avg Score,
+     Last Attempt
+   - Avg Score shown as an inline progress bar (green / amber / red)
+   - Reset button to clear all filters
+
+6. Activity
+   - School-wide activity feed (lazy-loaded on tab switch)
+
+
+ACTIONS
+-------
+- Send WhatsApp Alert    — individual alert per student
+- Bulk Alert             — select multiple students → send alerts in one click
+- Send Challenge         — custom challenge (subject, # questions, concept)
+- View Student Details   — opens a full student detail modal
+
+
+RECENT ALERTS PANEL
+-------------------
+- Shows up to 5 most recent alerts sent for students in this teacher's roster
+- Each entry: student name, reason, timestamp
+- Quick-action buttons: Alert again / Challenge
+
+
+OTHER
+-----
+- Refresh button to reload all dashboard data
+- Error state with retry on API failure
+
+
+================================================================================
+SLIDE 2 — SCHOOL DASHBOARD
+================================================================================
+
+OVERVIEW
+--------
+School-level dashboard for administrators to monitor engagement across all
+students (and teachers) in the school. Scoped to the logged-in school code.
+
+
+METRICS CARDS
+-------------
+- Total Students           — all enrolled students
+- Active This Week         — students with sessions in the current week
+- Active Sessions          — currently live sessions
+- At-Risk Students         — students flagged as at risk
+- Inactive Students        — students with no recent activity
+- Total Sessions This Week — aggregate session count for the week
+- Engagement Trend         — Up / Down / Stable indicator
+
+
+SCHOOL ANALYTICS SECTION
+------------------------
+- Visual analytics breakdown of student engagement
+- Trend chart driven by the school's engagement_trend data
+
+
+TABS
+----
+1. Students
+   - Full student table across the entire school
+   - Day filter: All / Today / 1 Day / 2 Days / 7 Days
+   - Row-level checkboxes for bulk alert selection
+
+2. Pre-Assessment
+   - School-wide test prep results, filterable by:
+     Chapter / Class / Section / Min Attempts / Min Score (%)
+   - Table columns: Student, Class, Chapters, Attempts, Best Score, Avg Score,
+     Last Attempt
+   - Avg Score shown as an inline progress bar (green / amber / red)
+   - Live match count + Reset button
+
+3. Activity
+   - School-wide activity feed (lazy-loaded on tab switch)
+
+
+ACTIONS
+-------
+- Send WhatsApp Alert    — individual alert per student
+- Bulk Alert             — select multiple students → send alerts in one click
+- View Student Details   — opens a full student detail modal
+
+
+RECENT ALERTS PANEL
+-------------------
+- Shows up to 10 most recent alerts sent across the school
+- Each entry: student ID, reason
+- Quick "Send Alert" button to re-alert the same student
+
+
+OTHER
+-----
+- Refresh button to reload all school data
+- Error state with retry on API failure (includes 404 handling for bad school code)
+
+================================================================================

@@ -356,6 +356,8 @@ interface StackedBarChartProps {
   xDataKey?: string;
   xTickFormatter?: (value: string | number) => string;
   tooltipLabelFormatter?: (value: string | number) => string;
+  showXAxisLabels?: boolean;
+  maxBarSize?: number;
 }
 
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({
@@ -366,6 +368,8 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
   xDataKey = 'label',
   xTickFormatter,
   tooltipLabelFormatter,
+  showXAxisLabels = false,
+  maxBarSize = 40,
 }) => {
   if (!data.length) {
     return (
@@ -375,9 +379,6 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
     );
   }
 
-  // For single data point, limit bar width to prevent overly wide bars
-  const maxBarSize = data.length === 1 ? 80 : undefined;
-
   return (
     <ChartCard title={title}>
       <ResponsiveContainer width="100%" height={height}>
@@ -385,10 +386,11 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
           <CartesianGrid strokeDasharray="3 3" stroke={THEME.gridLine} vertical={false} />
           <XAxis
             dataKey={xDataKey}
-            tick={false}
+            tick={showXAxisLabels ? { fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_BODY } : false}
             axisLine={false}
             tickLine={false}
-            height={0}
+            height={showXAxisLabels ? 24 : 0}
+            tickFormatter={xTickFormatter}
           />
           <YAxis
             tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}

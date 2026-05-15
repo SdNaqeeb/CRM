@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { dashboardAPI, alertAPI, activityAPI, challengeAPI } from '../services/api';
+import { dashboardAPI, alertAPI, activityAPI, challengeAPI, quizAPI, examAPI, QuizHomeworkItem, QuizSubmissionItem, TeacherExamItem, ExamAttemptItem } from '../services/api';
 import { TeacherDashboardData, ActivityOverview, TestPrepItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
-import MetricsCards from '../components/MetricsCards';
 import StudentTable from '../components/StudentTable';
 import SendAlertModal from '../components/SendAlertModal';
 import SendChallengeModal from '../components/SendChallengeModal';
 import StudentDetailModal from '../components/StudentDetailModal';
 import ActivityFeed from '../components/ActivityFeed';
-import { SchoolAnalytics } from '../components/AnalyticsSections';
+import WeeklyExamResults from '../components/WeeklyExamResults';
+import JEEExamResults from '../components/JEEExamResults';
+import StudentTrackGrid from '../components/StudentTrackGrid';
+import mockData from '../mock_data.json';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const FONT_SERIF = "'Source Serif 4', Georgia, serif";
@@ -22,11 +24,23 @@ const TeacherDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [activeTab, setActiveTab] = useState<'students' | 'pre-assessment' | 'activity'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'daily-quizzes' | 'weekly-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('students');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
   const [testPrepLoading, setTestPrepLoading] = useState(false);
+
+  const [quizHomeworks, setQuizHomeworks] = useState<QuizHomeworkItem[] | null>(null);
+  const [quizHomeworksLoading, setQuizHomeworksLoading] = useState(false);
+  const [selectedHomeworkId, setSelectedHomeworkId] = useState<number | null>(null);
+  const [homeworkSubmissions, setHomeworkSubmissions] = useState<QuizSubmissionItem[] | null>(null);
+  const [homeworkSubmissionsLoading, setHomeworkSubmissionsLoading] = useState(false);
+
+  const [teacherExams, setTeacherExams] = useState<TeacherExamItem[] | null>(null);
+  const [teacherExamsLoading, setTeacherExamsLoading] = useState(false);
+  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
+  const [examAttempts, setExamAttempts] = useState<ExamAttemptItem[] | null>(null);
+  const [examAttemptsLoading, setExamAttemptsLoading] = useState(false);
 
   const [prepChapterFilter, setPrepChapterFilter] = useState<string>('All');
   const [prepClassFilter, setPrepClassFilter] = useState<string>('All');
@@ -67,12 +81,8 @@ const TeacherDashboard: React.FC = () => {
       shareDashboardData(data);
       setError('');
     } catch (err: any) {
-      if (err?.response?.status === 404) {
-        setError(`Teacher username "${teacherUsername}" not found in the database.`);
-      } else {
-        setError('Failed to load dashboard. Please check if the API is running.');
-      }
-      console.error(err);
+      const message = err?.response?.data?.detail ?? err?.message ?? 'Unknown error';
+      setError(`Failed to load dashboard: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -102,6 +112,65 @@ const TeacherDashboard: React.FC = () => {
       setTestPrepData([]);
     } finally {
       setTestPrepLoading(false);
+    }
+  };
+
+  const loadQuizHomeworks = async () => {
+    if (quizHomeworks || !teacherUsername) return;
+    try {
+      setQuizHomeworksLoading(true);
+      const data = await quizAPI.getHomeworks(teacherUsername);
+      setQuizHomeworks(data.items);
+    } catch (err) {
+      console.error('Failed to load quiz homeworks:', err);
+      setQuizHomeworks([]);
+    } finally {
+      setQuizHomeworksLoading(false);
+    }
+  };
+
+  const loadTeacherExams = async () => {
+    if (teacherExams || !teacherUsername) return;
+    try {
+      setTeacherExamsLoading(true);
+      const data = await examAPI.getTeacherExams(teacherUsername);
+      setTeacherExams(data.items ?? []);
+    } catch (err) {
+      console.error('Failed to load teacher exams:', err);
+      setTeacherExams([]);
+    } finally {
+      setTeacherExamsLoading(false);
+    }
+  };
+
+  const handleSelectExam = async (examId: number) => {
+    if (examId === 0) { setSelectedExamId(null); setExamAttempts(null); return; }
+    setSelectedExamId(examId);
+    setExamAttempts(null);
+    try {
+      setExamAttemptsLoading(true);
+      const data = await examAPI.getExamAttempts(examId);
+      setExamAttempts(data.items ?? []);
+    } catch (err) {
+      console.error('Failed to load exam attempts:', err);
+      setExamAttempts([]);
+    } finally {
+      setExamAttemptsLoading(false);
+    }
+  };
+
+  const loadHomeworkSubmissions = async (homeworkId: number) => {
+    setSelectedHomeworkId(homeworkId);
+    setHomeworkSubmissions(null);
+    try {
+      setHomeworkSubmissionsLoading(true);
+      const data = await quizAPI.getSubmissions(homeworkId);
+      setHomeworkSubmissions(data.items);
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
+      setHomeworkSubmissions([]);
+    } finally {
+      setHomeworkSubmissionsLoading(false);
     }
   };
 
@@ -227,9 +296,9 @@ const TeacherDashboard: React.FC = () => {
   if (error) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', fontFamily: FONT }}>
-        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '40px', background: '#111827', borderRadius: '20px', border: '1px solid #1E293B' }}>
+        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '40px', background: '#0F172A', borderRadius: '20px', border: '1px solid #1E293B' }}>
           <h2 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, color: '#F1F5F9' }}>Connection Error</h2>
-          <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>{error}</p>
+          <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#94A3B8', lineHeight: 1.5 }}>{error}</p>
           <button onClick={loadDashboard} style={{ padding: '10px 24px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #0d9488, #14B8A6)', color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
             Retry
           </button>
@@ -251,9 +320,12 @@ const TeacherDashboard: React.FC = () => {
       });
 
   const tabs = [
-    { key: 'students' as const, label: 'Students', count: filteredStudents.length, color: '#3B82F6' },
-    { key: 'pre-assessment' as const, label: 'Pre-Assessment', count: testPrepData ? prepFilteredStudents.length : null, color: '#8B5CF6' },
-    { key: 'activity' as const, label: 'Activity', count: null, color: '#10B981' },
+    { key: 'students' as const, label: 'Students', count: filteredStudents.length, color: '#14B8A6' },
+    { key: 'daily-quizzes' as const, label: 'Daily Quizzes', count: null, color: '#14B8A6' },
+    { key: 'weekly-exams' as const, label: 'Weekly Exams', count: null, color: '#14B8A6' },
+    { key: 'jee-exams' as const, label: 'JEE Format', count: null, color: '#14B8A6' },
+    { key: 'pre-assessment' as const, label: 'Pre-Assessment', count: testPrepData ? prepFilteredStudents.length : null, color: '#14B8A6' },
+    { key: 'activity' as const, label: 'Activity', count: null, color: '#14B8A6' },
   ];
 
   const scoreColor = (s: number) => s >= 70 ? '#10B981' : s >= 50 ? '#F59E0B' : '#F43F5E';
@@ -261,50 +333,44 @@ const TeacherDashboard: React.FC = () => {
   return (
     <div style={{ minHeight: 'calc(100vh - 64px)', fontFamily: FONT }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #111827 0%, #1a2332 100%)', borderBottom: '1px solid #1E293B' }}>
+      <div style={{ background: 'linear-gradient(135deg, #0F172A 0%, #162032 100%)', borderBottom: '1px solid #1E293B' }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 800, color: '#F1F5F9', fontFamily: FONT_SERIF }}>
               {teacherLabel}
             </h1>
-            <span style={{ padding: '4px 14px', borderRadius: '8px', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)', fontSize: '15px', fontWeight: 700, color: '#3B82F6', fontFamily: FONT_SERIF }}>
+            <span style={{ padding: '4px 14px', borderRadius: '8px', background: 'rgba(20,184,166,0.12)', border: '1px solid rgba(20,184,166,0.2)', fontSize: '15px', fontWeight: 700, color: '#14B8A6', fontFamily: FONT_SERIF }}>
               {dashboardData.total_students} <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8' }}>Students</span>
             </span>
           </div>
-          <button onClick={loadDashboard} disabled={refreshing} style={{
-            padding: '7px 16px', borderRadius: '8px', border: 'none',
-            background: 'linear-gradient(135deg, #0d9488, #14B8A6)', color: '#fff',
-            fontSize: '12px', fontWeight: 700, cursor: refreshing ? 'wait' : 'pointer',
-            fontFamily: FONT, boxShadow: '0 2px 8px rgba(20,184,166,0.25)',
-            opacity: refreshing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '5px',
-          }}>
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6" strokeLinecap="round" strokeLinejoin="round" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            Refresh
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button onClick={loadDashboard} disabled={refreshing} style={{
+              padding: '7px 16px', borderRadius: '8px', border: 'none',
+              background: 'linear-gradient(135deg, #0d9488, #14B8A6)', color: '#fff',
+              fontSize: '12px', fontWeight: 700, cursor: refreshing ? 'wait' : 'pointer',
+              fontFamily: FONT, boxShadow: '0 2px 8px rgba(20,184,166,0.25)',
+              opacity: refreshing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '5px',
+            }}>
+              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6" strokeLinecap="round" strokeLinejoin="round" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px' }}>
-        {/* Metrics */}
-        <MetricsCards
-          totalStudents={dashboardData.total_students}
-          activeStudents={dashboardData.active_students}
-          activeSessions={dashboardData.active_sessions}
-          atRiskStudents={dashboardData.at_risk_students}
-          inactiveStudents={dashboardData.inactive_students}
+        {/* Track Status Grid — shown first so the graph is front and centre */}
+        <StudentTrackGrid
           students={dashboardData.students}
+          schoolCode={user?.school_code ?? ''}
+          teacherUsername={teacherUsername ?? ''}
         />
-
-        {/* Test Prep Analytics */}
-        <div style={{ marginTop: '24px' }}>
-          <SchoolAnalytics students={dashboardData.students} />
-        </div>
 
         {/* Tabs */}
         <div style={{ marginTop: '24px' }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
               {tabs.map((t) => (
                 <button
                   key={t.key}
@@ -312,12 +378,14 @@ const TeacherDashboard: React.FC = () => {
                     setActiveTab(t.key);
                     if (t.key === 'activity') loadActivity();
                     if (t.key === 'pre-assessment') loadTestPrep();
+                    if (t.key === 'daily-quizzes') loadQuizHomeworks();
+                    if (t.key === 'weekly-exams') loadTeacherExams();
                   }}
                   style={{
                     padding: '7px 16px', borderRadius: '99px',
                     border: activeTab === t.key ? `1.5px solid ${t.color}` : '1.5px solid transparent',
-                    background: activeTab === t.key ? `${t.color}1A` : '#111827',
-                    color: activeTab === t.key ? t.color : '#64748B',
+                    background: activeTab === t.key ? `${t.color}1A` : '#0F172A',
+                    color: activeTab === t.key ? t.color : '#94A3B8',
                     fontSize: '13px', fontWeight: activeTab === t.key ? 700 : 500,
                     cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s',
                   }}
@@ -335,13 +403,13 @@ const TeacherDashboard: React.FC = () => {
 
             {activeTab === 'students' && (
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', marginRight: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter</span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#94A3B8', marginRight: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filter</span>
                 {dayFilterOptions.map((opt) => (
                   <button key={String(opt.value)} onClick={() => setDayFilter(opt.value)} style={{
                     padding: '5px 12px', borderRadius: '8px',
                     border: dayFilter === opt.value ? '1.5px solid #14B8A6' : '1.5px solid transparent',
-                    background: dayFilter === opt.value ? 'rgba(20,184,166,0.15)' : '#111827',
-                    color: dayFilter === opt.value ? '#14B8A6' : '#64748B',
+                    background: dayFilter === opt.value ? 'rgba(20,184,166,0.15)' : '#0F172A',
+                    color: dayFilter === opt.value ? '#14B8A6' : '#94A3B8',
                     fontSize: '12px', fontWeight: dayFilter === opt.value ? 700 : 500,
                     cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s',
                   }}>{opt.label}</button>
@@ -351,7 +419,142 @@ const TeacherDashboard: React.FC = () => {
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'activity' ? (
+          {activeTab === 'daily-quizzes' ? (
+            quizHomeworksLoading ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#14B8A6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                  ))}
+                </div>
+                <p style={{ margin: 0, fontSize: '14px', color: '#94A3B8' }}>Loading quizzes...</p>
+              </div>
+            ) : selectedHomeworkId !== null ? (
+              /* Submissions drill-down */
+              <div>
+                <button
+                  onClick={() => { setSelectedHomeworkId(null); setHomeworkSubmissions(null); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', padding: '7px 14px', borderRadius: '8px', border: '1px solid #1E293B', background: 'transparent', color: '#94A3B8', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  Back to Quizzes
+                </button>
+                {homeworkSubmissionsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#14B8A6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                      ))}
+                    </div>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#94A3B8' }}>Loading submissions...</p>
+                  </div>
+                ) : !homeworkSubmissions || homeworkSubmissions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8', fontSize: '14px' }}>No submissions found for this quiz.</div>
+                ) : (
+                  <div style={{ background: '#0F172A', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
+                    <div style={{ padding: '14px 18px', borderBottom: '1px solid #1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#F1F5F9' }}>
+                        {quizHomeworks?.find((h) => h.id === selectedHomeworkId)?.title ?? 'Quiz Submissions'}
+                      </span>
+                      <span style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(20,184,166,0.15)', fontSize: '11px', fontWeight: 700, color: '#14B8A6' }}>
+                        {homeworkSubmissions.length} submissions
+                      </span>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #1E293B', background: '#0B1120' }}>
+                          {['Student', 'Class', 'Section', 'Submitted At'].map((h) => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {homeworkSubmissions.map((sub, i) => (
+                          <tr key={sub.id} style={{ borderBottom: i < homeworkSubmissions.length - 1 ? '1px solid #1E293B' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 600, color: '#F1F5F9' }}>{sub.student_name}</td>
+                            <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{sub.class_name ?? '—'}</td>
+                            <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{sub.section_name ?? '—'}</td>
+                            <td style={{ padding: '12px 16px', color: '#94A3B8', fontSize: '12px' }}>
+                              {sub.created_at ? new Date(sub.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : !quizHomeworks || quizHomeworks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8', fontSize: '14px' }}>No quizzes found.</div>
+            ) : (
+              /* Homework list */
+              <div style={{ background: '#0F172A', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid #1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#F1F5F9' }}>Daily MCQ Quizzes</span>
+                  <span style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(20,184,166,0.15)', fontSize: '11px', fontWeight: 700, color: '#14B8A6' }}>{quizHomeworks.length}</span>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #1E293B', background: '#0B1120' }}>
+                      {['Title', 'Subject', 'Chapters', 'Assigned', 'Due', 'Submissions'].map((h) => (
+                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quizHomeworks.map((hw, i) => {
+                      const dd = hw.description_data;
+                      const subject = dd?.subject_name ?? dd?.subject ?? '—';
+                      const chapters = dd?.chapters ?? [];
+                      return (
+                        <tr
+                          key={hw.id}
+                          onClick={() => loadHomeworkSubmissions(hw.id)}
+                          style={{ borderBottom: i < quizHomeworks.length - 1 ? '1px solid #1E293B' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)', cursor: 'pointer' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(20,184,166,0.06)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')}
+                        >
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: '#F1F5F9' }}>{hw.title ?? hw.homework_code ?? `Quiz #${hw.id}`}</td>
+                          <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{subject}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {chapters.slice(0, 2).map((ch) => (
+                                <span key={ch} style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(20,184,166,0.12)', color: '#14B8A6', fontSize: '11px', fontWeight: 600 }}>
+                                  {ch.replace(/_/g, ' ')}
+                                </span>
+                              ))}
+                              {chapters.length > 2 && <span style={{ padding: '2px 8px', borderRadius: '99px', background: '#1E293B', color: '#94A3B8', fontSize: '11px' }}>+{chapters.length - 2}</span>}
+                              {chapters.length === 0 && <span style={{ color: '#94A3B8' }}>—</span>}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 16px', color: '#94A3B8', fontSize: '12px' }}>
+                            {hw.date_assigned ? new Date(hw.date_assigned).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', color: '#94A3B8', fontSize: '12px' }}>
+                            {hw.due_date ? new Date(hw.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ fontWeight: 700, color: '#14B8A6', fontSize: '14px' }}>{hw.total_submissions}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : activeTab === 'weekly-exams' ? (
+            <WeeklyExamResults
+              exams={teacherExams ?? []}
+              loading={teacherExamsLoading}
+              onSelectExam={handleSelectExam}
+              selectedExamId={selectedExamId}
+              attempts={examAttempts}
+              attemptsLoading={examAttemptsLoading}
+            />
+          ) : activeTab === 'jee-exams' ? (
+            <JEEExamResults exams={mockData.mockData.weeklyJEEExams} />
+          ) : activeTab === 'activity' ? (
             activityLoading ? (
               <div style={{ textAlign: 'center', padding: '48px 0' }}>
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
@@ -364,14 +567,14 @@ const TeacherDashboard: React.FC = () => {
             ) : activityData ? (
               <ActivityFeed data={activityData} />
             ) : (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: '14px' }}>No activity data available.</div>
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8', fontSize: '14px' }}>No activity data available.</div>
             )
           ) : activeTab === 'pre-assessment' ? (
             testPrepLoading ? (
               <div style={{ textAlign: 'center', padding: '48px 0' }}>
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
                   {[0, 1, 2].map((i) => (
-                    <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#8B5CF6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                    <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#14B8A6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
                   ))}
                 </div>
                 <p style={{ margin: 0, fontSize: '14px', color: '#94A3B8' }}>Loading pre-assessment data...</p>
@@ -379,22 +582,22 @@ const TeacherDashboard: React.FC = () => {
             ) : (
               <div>
                 {/* Filter bar */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between', padding: '16px 20px', background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between', padding: '16px 20px', background: '#0F172A', borderRadius: '14px', border: '1px solid #1E293B', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Chapter</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Chapter</div>
                       <select value={prepChapterFilter} onChange={(e) => setPrepChapterFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '160px' }}>
                         {prepChapterOptions.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Min Attempts</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Min Attempts</div>
                       <select value={prepMinAttempts} onChange={(e) => setPrepMinAttempts(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer' }}>
                         {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}+</option>)}
                       </select>
                     </div>
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Score Greater Than</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Score Greater Than</div>
                       <select value={prepMinScore} onChange={(e) => setPrepMinScore(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer' }}>
                         <option value={0}>Any score</option>
                         {[40, 50, 60, 70, 80, 90].map((n) => <option key={n} value={n}>{n}%</option>)}
@@ -403,24 +606,24 @@ const TeacherDashboard: React.FC = () => {
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Class</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Class</div>
                       <select value={prepClassFilter} onChange={(e) => { setPrepClassFilter(e.target.value); setPrepSectionFilter('All'); }} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '100px' }}>
                         {prepClassOptions.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Section</div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Section</div>
                       <select value={prepSectionFilter} onChange={(e) => setPrepSectionFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '100px' }}>
                         {prepSectionOptions.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ fontSize: '13px', color: '#94A3B8' }}>
-                        <span style={{ fontWeight: 700, color: '#8B5CF6', fontSize: '16px' }}>{prepFilteredStudents.length}</span> match
+                        <span style={{ fontWeight: 700, color: '#14B8A6', fontSize: '16px' }}>{prepFilteredStudents.length}</span> match
                       </span>
                       <button
                         onClick={() => { setPrepChapterFilter('All'); setPrepClassFilter('All'); setPrepSectionFilter('All'); setPrepMinAttempts(1); setPrepMinScore(0); }}
-                        style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #334155', background: 'transparent', color: '#64748B', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                        style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #1E293B', background: 'transparent', color: '#94A3B8', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
                       >
                         Reset
                       </button>
@@ -430,14 +633,14 @@ const TeacherDashboard: React.FC = () => {
 
                 {/* Pre-Assessment Table */}
                 {prepFilteredStudents.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: '14px' }}>No students match the selected filters.</div>
+                  <div style={{ textAlign: 'center', padding: '48px 0', color: '#94A3B8', fontSize: '14px' }}>No students match the selected filters.</div>
                 ) : (
-                  <div style={{ background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
+                  <div style={{ background: '#0F172A', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #1E293B', background: '#0B1120' }}>
                           {['Student', 'Class', 'Chapters', 'Attempts', 'Best Score', 'Avg Score', 'Last Attempt'].map((h) => (
-                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -459,16 +662,16 @@ const TeacherDashboard: React.FC = () => {
                               <td style={{ padding: '12px 16px' }}>
                                 <button onClick={() => setViewStudentId(student.student_id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
                                   <div style={{ fontWeight: 600, color: '#F1F5F9' }}>{student.full_name}</div>
-                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{student.section ?? ''}</div>
+                                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{student.section ?? ''}</div>
                                 </button>
                               </td>
                               <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{classLabel}</td>
                               <td style={{ padding: '12px 16px' }}>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                   {chapters.slice(0, 3).map((ch) => (
-                                    <span key={ch} style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(139,92,246,0.15)', color: '#A78BFA', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{ch}</span>
+                                    <span key={ch} style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(20,184,166,0.12)', color: '#14B8A6', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{ch}</span>
                                   ))}
-                                  {chapters.length > 3 && <span style={{ padding: '2px 8px', borderRadius: '99px', background: '#1E293B', color: '#64748B', fontSize: '11px' }}>+{chapters.length - 3}</span>}
+                                  {chapters.length > 3 && <span style={{ padding: '2px 8px', borderRadius: '99px', background: '#1E293B', color: '#94A3B8', fontSize: '11px' }}>+{chapters.length - 3}</span>}
                                 </div>
                               </td>
                               <td style={{ padding: '12px 16px', fontWeight: 700, color: '#F1F5F9' }}>{items.length}</td>
@@ -483,7 +686,7 @@ const TeacherDashboard: React.FC = () => {
                                   <span style={{ fontWeight: 600, color: scoreColor(avgScore), minWidth: '32px' }}>{avgScore}%</span>
                                 </div>
                               </td>
-                              <td style={{ padding: '12px 16px', color: '#64748B', fontSize: '12px' }}>
+                              <td style={{ padding: '12px 16px', color: '#94A3B8', fontSize: '12px' }}>
                                 {lastAttempt ? new Date(lastAttempt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                               </td>
                             </tr>
@@ -509,7 +712,7 @@ const TeacherDashboard: React.FC = () => {
 
         {/* Recent Alerts */}
         {dashboardData.recent_alerts.length > 0 && (
-          <div style={{ marginTop: '24px', background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
+          <div style={{ marginTop: '24px', background: '#0F172A', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
             <div style={{ padding: '14px 18px', borderBottom: '1px solid #1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <svg width="16" height="16" fill="none" stroke="#F59E0B" strokeWidth="2" viewBox="0 0 24 24">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
@@ -528,7 +731,7 @@ const TeacherDashboard: React.FC = () => {
                       {dashboardData.students.find((s) => s.student_id === alert.student_id)?.full_name ?? `Student #${alert.student_id}`}
                     </p>
                     <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#94A3B8' }}>{alert.reason}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#64748B' }}>{new Date(alert.created_at).toLocaleString()}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#94A3B8' }}>{new Date(alert.created_at).toLocaleString()}</p>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                     <button onClick={() => handleSendAlert(alert.student_id)} style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: 'rgba(16,185,129,0.15)', color: '#10B981', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
