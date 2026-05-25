@@ -9,6 +9,7 @@ import SendAlertModal from '../components/SendAlertModal';
 import ActivityFeed from '../components/ActivityFeed';
 import StudentDetailModal from '../components/StudentDetailModal';
 import { SchoolAnalytics } from '../components/AnalyticsSections';
+import TimelineUpload from '../components/TimelineUpload';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const FONT_SERIF = "'Source Serif 4', Georgia, serif";
@@ -23,7 +24,7 @@ const SchoolDashboard: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [viewStudentId, setViewStudentId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'students' | 'teachers' | 'activity' | 'pre-assessment'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'teachers' | 'activity' | 'pre-assessment' | 'timeline'>('students');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
@@ -270,6 +271,7 @@ const SchoolDashboard: React.FC = () => {
     // { key: 'teachers' as const, label: 'Teachers', count: filteredTeachersList.length, color: '#8B5CF6' },
     { key: 'pre-assessment' as const, label: 'Pre-Assessment', count: testPrepData ? prepFilteredStudents.length : null, color: '#8B5CF6' },
     { key: 'activity' as const, label: 'Activity', count: null, color: '#10B981' },
+    { key: 'timeline' as const, label: 'Timeline', count: null, color: '#A78BFA' },
   ];
 
   return (
@@ -523,6 +525,8 @@ const SchoolDashboard: React.FC = () => {
                 )}
               </div>
             )
+          ) : activeTab === 'timeline' ? (
+            <TimelineUpload schoolCode={schoolCode} />
           ) : (
             <StudentTable
               students={displayUsers}

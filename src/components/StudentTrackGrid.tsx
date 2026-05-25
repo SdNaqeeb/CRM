@@ -1,9 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StudentEngagementSummary } from '../types';
 import { StackedBarChart, LineChart } from './AnalyticsCharts';
+import { ScheduledAssignmentItem } from '../services/api';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const API_BASE = process.env.REACT_APP_API_URL || 'https://crm.smartlearners.ai/backend-api/';
+
+const C = {
+  bg: '#0B1120', card: '#111827', cardAlt: '#1a2332',
+  border: '#1E293B', borderStrong: '#334155',
+  text: '#F1F5F9', textSecondary: '#64748B', textMuted: '#94A3B8',
+  teal: '#14B8A6', tealSoft: 'rgba(20,184,166,0.15)',
+  blue: '#3B82F6', blueSoft: 'rgba(59,130,246,0.12)',
+  shadow: '0 4px 12px rgba(0,0,0,0.15)',
+  shadowLg: '0 8px 24px rgba(0,0,0,0.2)',
+};
 
 interface SessionItem {
   username: string;
@@ -16,6 +27,9 @@ interface StudentTrackGridProps {
   students: StudentEngagementSummary[];
   schoolCode: string;
   teacherUsername: string;
+  externalTopic?: string;
+  onExternalTopicChange?: (topic: string) => void;
+  scheduledAssignments?: ScheduledAssignmentItem[];
 }
 
 type TrackStatus = 'completely-off' | 'slightly-off' | 'on-track';
@@ -91,7 +105,7 @@ function computeStatus(
   return 'on-track';
 }
 
-const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCode, teacherUsername }) => {
+const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCode, teacherUsername, externalTopic, onExternalTopicChange, scheduledAssignments }) => {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quizScoreMap, setQuizScoreMap] = useState<Map<number, { total: number; count: number }>>(new Map());
   const [quizTopicMap, setQuizTopicMap] = useState<Map<number, Map<string, { correct: number; total: number }>>>(new Map());
@@ -101,7 +115,20 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   const [selectedStudentStatus, setSelectedStudentStatus] = useState<StudentStatus | null>(null);
   const [topicModalStudent, setTopicModalStudent] = useState<StudentStatus | null>(null);
   const [classFilter, setClassFilter] = useState<string>('All');
-  const [selectedTopic, setSelectedTopic] = useState<string>('All');
+  const [selectedTopic, setSelectedTopicInternal] = useState<string>('All');
+
+  const setSelectedTopic = (t: string) => {
+    setSelectedTopicInternal(t);
+    onExternalTopicChange?.(t);
+  };
+
+  useEffect(() => {
+    if (externalTopic !== undefined && externalTopic !== selectedTopic) {
+      setSelectedTopicInternal(externalTopic);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalTopic]);
+  const [assignmentScoreMap, setAssignmentScoreMap] = useState<Map<number, number>>(new Map());
   const [examScoreMap, setExamScoreMap] = useState<Map<number, { total: number; count: number }>>(new Map());
   const [totalExams, setTotalExams] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -276,6 +303,39 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     fetchAll();
   }, [schoolCode, teacherUsername]);
 
+  useEffect(() => {
+    if (selectedTopic === 'All' || !scheduledAssignments?.length) {
+      setAssignmentScoreMap(new Map());
+      return;
+    }
+    const codes = scheduledAssignments
+      .filter(a => a.topic_name === selectedTopic && a.assignment_code)
+      .map(a => a.assignment_code!);
+    if (codes.length === 0) { setAssignmentScoreMap(new Map()); return; }
+
+    Promise.all(
+      codes.map(code =>
+        fetch(`${API_BASE}api/external-data/scheduled-assignments/results/by-assignment-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignment_code: code, limit: 1000 }),
+        }).then(r => r.json()).catch(() => ({ items: [] }))
+      )
+    ).then(results => {
+      const raw = new Map<number, { total: number; count: number }>();
+      for (const result of results) {
+        for (const item of (result.items ?? [])) {
+          if (item.student_id == null || item.percentage == null) continue;
+          const prev = raw.get(item.student_id) ?? { total: 0, count: 0 };
+          raw.set(item.student_id, { total: prev.total + item.percentage, count: prev.count + 1 });
+        }
+      }
+      const avg = new Map<number, number>();
+      raw.forEach(({ total, count }, sid) => avg.set(sid, Math.round(total / count)));
+      setAssignmentScoreMap(avg);
+    });
+  }, [selectedTopic, scheduledAssignments]);
+
   const sessionsByUsername = useMemo(() => {
     const map = new Map<string, { minutesPerDay: Map<string, number> }>();
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -301,8 +361,9 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     const topics = new Set<string>();
     quizTopicMap.forEach(tMap => tMap.forEach((_, t) => topics.add(t)));
     prepTopicMap.forEach(tMap => tMap.forEach((_, t) => topics.add(t)));
+    scheduledAssignments?.forEach(a => { if (a.topic_name) topics.add(a.topic_name); });
     return ['All', ...Array.from(topics).sort((a, b) => a.localeCompare(b))];
-  }, [quizTopicMap, prepTopicMap]);
+  }, [quizTopicMap, prepTopicMap, scheduledAssignments]);
 
   const studentStatuses: StudentStatus[] = useMemo(() => {
     return students.map(student => {
@@ -317,12 +378,17 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
       let effectiveHasQuizData: boolean;
 
       if (selectedTopic !== 'All') {
-        const qEntry = quizTopicMap.get(sid)?.get(selectedTopic);
-        const pEntry = prepTopicMap.get(sid)?.get(selectedTopic);
-        const correct = (qEntry?.correct ?? 0) + (pEntry?.correct ?? 0);
-        const total = (qEntry?.total ?? 0) + (pEntry?.total ?? 0);
-        quizAvgScore = total > 0 ? Math.round((correct / total) * 100) : null;
-        effectiveHasQuizData = quizTopicMap.size > 0 || prepTopicMap.size > 0;
+        const assignmentScore = assignmentScoreMap.get(sid);
+        if (assignmentScore !== undefined) {
+          quizAvgScore = assignmentScore;
+        } else {
+          const qEntry = quizTopicMap.get(sid)?.get(selectedTopic);
+          const pEntry = prepTopicMap.get(sid)?.get(selectedTopic);
+          const correct = (qEntry?.correct ?? 0) + (pEntry?.correct ?? 0);
+          const total = (qEntry?.total ?? 0) + (pEntry?.total ?? 0);
+          quizAvgScore = total > 0 ? Math.round((correct / total) * 100) : null;
+        }
+        effectiveHasQuizData = assignmentScoreMap.size > 0 || quizTopicMap.size > 0 || prepTopicMap.size > 0;
       } else {
         const quizEntry = quizScoreMap.get(sid);
         if (quizEntry && quizEntry.count > 0) {
@@ -351,7 +417,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         totalExams,
       };
     });
-  }, [students, sessionsByUsername, quizScoreMap, hasQuizData, examScoreMap, totalExams, thresholds, selectedTopic, quizTopicMap, prepTopicMap]);
+  }, [students, sessionsByUsername, quizScoreMap, hasQuizData, examScoreMap, totalExams, thresholds, selectedTopic, quizTopicMap, prepTopicMap, assignmentScoreMap]);
 
   const classOptions = useMemo(() => {
     const grades = new Set<string>();
@@ -412,10 +478,10 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
       <div style={{ textAlign: 'center', padding: '60px 0' }}>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
           {[0, 1, 2].map(i => (
-            <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#14B8A6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+            <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: C.teal, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
           ))}
         </div>
-        <p style={{ margin: 0, fontSize: '14px', color: '#64748B', fontFamily: FONT }}>Loading tracking data...</p>
+        <p style={{ margin: 0, fontSize: '14px', color: C.textMuted, fontFamily: FONT }}>Loading tracking data...</p>
       </div>
     );
   }
@@ -428,7 +494,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
 
       {/* ── Top row: class filters ── */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: '2px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: '2px' }}>
           Class
         </span>
         {classOptions.map(cls => (
@@ -437,9 +503,9 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
             onClick={() => { setClassFilter(cls); setSelectedBarStatus(null); }}
             style={{
               padding: '5px 14px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
-              border: classFilter === cls ? '1.5px solid #3B82F6' : '1.5px solid #1E293B',
-              background: classFilter === cls ? 'rgba(59,130,246,0.15)' : '#0F172A',
-              color: classFilter === cls ? '#3B82F6' : '#64748B',
+              border: classFilter === cls ? `1.5px solid ${C.blue}` : `1.5px solid ${C.border}`,
+              background: classFilter === cls ? C.blueSoft : 'transparent',
+              color: classFilter === cls ? C.blue : C.textSecondary,
               fontSize: '12px', fontWeight: classFilter === cls ? 700 : 500,
               transition: 'all 0.15s',
             }}
@@ -450,14 +516,14 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
       </div>
 
       {/* ── Bar Chart ── */}
-      <div style={{ background: '#0d1117', borderRadius: '16px', border: '1px solid #1E293B', padding: '20px 24px 16px', marginBottom: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px', textAlign: 'center' }}>
+      <div style={{ background: C.card, borderRadius: '16px', border: `1px solid ${C.border}`, padding: '20px 24px 16px', marginBottom: '20px', boxShadow: C.shadowLg }}>
+        <div style={{ fontSize: '12px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px', textAlign: 'center' }}>
           Track Status Overview
           {selectedTopic !== 'All' && (
-            <span style={{ marginLeft: '8px', color: '#14B8A6', fontWeight: 600, textTransform: 'none', fontSize: '12px' }}>· {selectedTopic}</span>
+            <span style={{ marginLeft: '8px', color: C.teal, fontWeight: 600, textTransform: 'none', fontSize: '12px' }}>· {selectedTopic}</span>
           )}
           {classFilter !== 'All' && (
-            <span style={{ marginLeft: '8px', color: '#3B82F6', fontWeight: 600 }}>· Class {classFilter}</span>
+            <span style={{ marginLeft: '8px', color: C.blue, fontWeight: 600 }}>· Class {classFilter}</span>
           )}
         </div>
 
@@ -493,20 +559,20 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                   style={{
                     position: 'absolute', bottom: `${barHeightPx + 54}px`, left: '50%',
                     transform: 'translateX(-50%)',
-                    background: '#111827', border: `1px solid ${cfg.color}55`,
+                    background: C.text, border: `1px solid ${C.border}`,
                     borderRadius: '8px', padding: '6px 10px',
-                    fontSize: '11px', fontWeight: 600, color: '#F1F5F9',
+                    fontSize: '11px', fontWeight: 600, color: '#fff',
                     whiteSpace: 'nowrap', pointerEvents: 'none',
                     opacity: 0, transition: 'opacity 0.15s ease',
                     zIndex: 10,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                    boxShadow: C.shadowLg,
                   }}
                 >
                   {count === 0 ? 'No students in this category' : count === 1 ? 'Click to view student' : 'Click to view students'}
                   <div style={{
                     position: 'absolute', bottom: '-5px', left: '50%', transform: 'translateX(-50%)',
-                    width: '8px', height: '8px', background: '#111827',
-                    border: `1px solid ${cfg.color}55`, borderTop: 'none', borderLeft: 'none',
+                    width: '8px', height: '8px', background: C.text,
+                    border: `1px solid ${C.border}`, borderTop: 'none', borderLeft: 'none',
                     rotate: '45deg',
                   }} />
                 </div>
@@ -518,35 +584,25 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                   height: `${CHART_HEIGHT + 30}px`,
                 }}>
                   <div style={{
-                    fontSize: '22px', fontWeight: 800, lineHeight: 1,
-                    color: cfg.color,
-                    marginBottom: '8px',
-                    transition: 'all 0.2s',
-                    textShadow: `0 0 12px ${cfg.color}99`,
+                    fontSize: '26px', fontWeight: 800, lineHeight: 1,
+                    color: cfg.color, marginBottom: '8px', transition: 'all 0.2s',
                   }}>
                     {count}
                   </div>
                   <div style={{
-                    width: '100%',
-                    height: `${barHeightPx}px`,
-                    background: isSelected
-                      ? `linear-gradient(180deg, ${cfg.color} 0%, ${cfg.color}CC 100%)`
-                      : `linear-gradient(180deg, ${cfg.color}EE 0%, ${cfg.color}99 100%)`,
+                    width: '100%', height: `${barHeightPx}px`,
+                    background: isSelected ? cfg.color : `${cfg.color}CC`,
                     borderRadius: '8px 8px 4px 4px',
-                    border: `1px solid ${cfg.color}88`,
+                    border: `1px solid ${cfg.color}`,
                     transition: 'all 0.25s ease',
-                    boxShadow: isSelected
-                      ? `0 0 24px ${cfg.color}66, 0 8px 32px ${cfg.color}44`
-                      : `0 0 12px ${cfg.color}44, 0 4px 16px ${cfg.color}22`,
+                    boxShadow: isSelected ? `0 4px 16px ${cfg.color}55` : `0 2px 8px ${cfg.color}33`,
                   }} />
                 </div>
 
                 {/* Label */}
                 <div style={{
-                  marginTop: '10px', fontSize: '12px', fontWeight: 700,
-                  color: cfg.color,
-                  textAlign: 'center', lineHeight: 1.3,
-                  transition: 'color 0.2s',
+                  marginTop: '10px', fontSize: '11px', fontWeight: 700,
+                  color: cfg.color, textAlign: 'center', lineHeight: 1.3,
                 }}>
                   {cfg.label}
                 </div>
@@ -563,17 +619,17 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         </div>
 
         {/* Legend */}
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #1E293B', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '16px', paddingTop: '12px', borderTop: `1px solid ${C.border}`, justifyContent: 'center' }}>
           {BAR_ORDER.map(status => {
             const cfg = STATUS_CONFIG[status];
             return (
               <div key={status} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cfg.color, boxShadow: `0 0 6px ${cfg.color}` }} />
+                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cfg.color }} />
                 <span style={{ fontSize: '12px', fontWeight: 600, color: cfg.color }}>{cfg.label}</span>
               </div>
             );
           })}
-          <span style={{ marginLeft: 'auto', fontSize: '11px', color: '#475569' }}>
+          <span style={{ marginLeft: 'auto', fontSize: '11px', color: C.textMuted }}>
             Click a bar to see students
           </span>
         </div>
@@ -606,8 +662,8 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
 
       {/* ── Topic filter row ── */}
       {allTopics.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', padding: '12px 16px', background: '#0F172A', borderRadius: '12px', border: '1px solid #1E293B', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', padding: '12px 16px', background: C.card, borderRadius: '12px', border: `1px solid ${C.border}`, flexWrap: 'wrap', boxShadow: C.shadow }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
             Topic
           </span>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
@@ -617,9 +673,9 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                 onClick={() => { setSelectedTopic(topic); setSelectedBarStatus(null); }}
                 style={{
                   padding: '4px 12px', borderRadius: '99px', cursor: 'pointer', fontFamily: FONT,
-                  border: selectedTopic === topic ? '1.5px solid #14B8A6' : '1.5px solid #1E293B',
-                  background: selectedTopic === topic ? 'rgba(20,184,166,0.15)' : 'transparent',
-                  color: selectedTopic === topic ? '#14B8A6' : '#64748B',
+                  border: selectedTopic === topic ? `1.5px solid ${C.teal}` : `1.5px solid ${C.border}`,
+                  background: selectedTopic === topic ? C.tealSoft : 'transparent',
+                  color: selectedTopic === topic ? C.teal : C.textSecondary,
                   fontSize: '12px', fontWeight: selectedTopic === topic ? 700 : 500,
                   transition: 'all 0.15s', whiteSpace: 'nowrap',
                 }}
@@ -631,7 +687,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
           {selectedTopic !== 'All' && (
             <button
               onClick={() => { setSelectedTopic('All'); setSelectedBarStatus(null); }}
-              style={{ padding: '4px 10px', borderRadius: '8px', border: '1px solid #1E293B', background: 'transparent', color: '#64748B', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}
+              style={{ padding: '4px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}
             >
               Clear
             </button>
@@ -662,29 +718,29 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
             <div style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               marginBottom: '14px', padding: '12px 16px',
-              background: '#111827', borderRadius: '12px',
+              background: cfg.bg, borderRadius: '12px',
               border: `1px solid ${cfg.border}`,
             }}>
               <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
-              <span style={{ fontSize: '14px', fontWeight: 700, color: '#F1F5F9' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: cfg.color }}>
                 {cfg.label} Students
               </span>
               <span style={{
                 padding: '2px 10px', borderRadius: '99px',
-                background: cfg.bg, fontSize: '12px', fontWeight: 700, color: cfg.color,
+                background: C.card, fontSize: '12px', fontWeight: 700, color: cfg.color,
               }}>
                 {selectedBarStudents.length}
               </span>
               {classFilter !== 'All' && (
-                <span style={{ fontSize: '12px', color: '#64748B' }}>· Class {classFilter}</span>
+                <span style={{ fontSize: '12px', color: C.textSecondary }}>· Class {classFilter}</span>
               )}
               <button
                 onClick={() => setSelectedBarStatus(null)}
                 style={{
                   marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '5px',
                   padding: '5px 12px', borderRadius: '8px',
-                  border: '1px solid #1E293B', background: 'transparent',
-                  color: '#64748B', fontSize: '12px', fontWeight: 600,
+                  border: `1px solid ${C.border}`, background: C.card,
+                  color: C.textSecondary, fontSize: '12px', fontWeight: 600,
                   cursor: 'pointer', fontFamily: FONT,
                 }}
               >
@@ -696,7 +752,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
             </div>
 
             {selectedBarStudents.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: '14px' }}>
+              <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '14px' }}>
                 No students in this category{classFilter !== 'All' ? ` for class ${classFilter}` : ''}.
               </div>
             ) : (
@@ -723,20 +779,21 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                         else setSelectedStudentStatus(ss);
                       }}
                       style={{
-                        background: '#111827', border: `1.5px solid ${scfg.border}`,
+                        background: C.card, border: `1.5px solid ${scfg.border}`,
                         borderRadius: '14px', padding: '16px', position: 'relative',
                         overflow: 'hidden', cursor: 'pointer', transition: 'box-shadow 0.15s',
+                        boxShadow: C.shadow,
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 0 0 2px ${scfg.color}55`)}
-                      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                      onMouseEnter={e => (e.currentTarget.style.boxShadow = C.shadowLg)}
+                      onMouseLeave={e => (e.currentTarget.style.boxShadow = C.shadow)}
                     >
                       {/* Top accent */}
                       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: scfg.color }} />
 
-                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#F1F5F9', marginBottom: '2px', lineHeight: 1.3 }}>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: C.text, marginBottom: '2px', lineHeight: 1.3 }}>
                         {student.full_name}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '11px', color: C.textMuted, marginBottom: '10px' }}>
                         {[student.grade, student.section].filter(Boolean).join(' · ') || '—'}
                       </div>
 
@@ -753,7 +810,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                           pct={quizAvgScore != null ? Math.min(100, quizAvgScore) : 0}
                           barColor={quizBarColor}
                           showBar={(hasQuizData || selectedTopic !== 'All') && quizAvgScore != null}
-                          valueColor={hasQuizData || selectedTopic !== 'All' ? (quizAvgScore != null ? quizBarColor : '#F43F5E') : '#64748B'}
+                          valueColor={hasQuizData || selectedTopic !== 'All' ? (quizAvgScore != null ? quizBarColor : '#F43F5E') : C.textMuted}
                         />
                         {selectedTopic === 'All' && (
                           <ScoreRow
@@ -762,13 +819,13 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                             pct={examAvg != null ? Math.min(100, examAvg) : 0}
                             barColor={examBarColor}
                             showBar={te > 0 && examAvg != null}
-                            valueColor={te > 0 ? (examAvg != null ? examBarColor : '#F43F5E') : '#64748B'}
+                            valueColor={te > 0 ? (examAvg != null ? examBarColor : '#F43F5E') : C.textMuted}
                           />
                         )}
                       </div>
 
                       {/* View details hint */}
-                      <div style={{ marginTop: '10px', fontSize: '10px', color: '#94A3B8', textAlign: 'right' }}>
+                      <div style={{ marginTop: '10px', fontSize: '10px', color: C.textMuted, textAlign: 'right' }}>
                         {selectedTopic !== 'All' ? 'Tap for attempts →' : 'Tap for topics →'}
                       </div>
                     </div>
@@ -822,29 +879,29 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
           >
             <div
               onClick={e => e.stopPropagation()}
-              style={{ background: '#111827', borderRadius: '20px', border: `1.5px solid ${cfg.border}`, width: '100%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', fontFamily: FONT }}
+              style={{ background: C.card, borderRadius: '20px', border: `1.5px solid ${cfg.border}`, width: '100%', maxWidth: '520px', overflow: 'hidden', boxShadow: C.shadowLg, fontFamily: FONT }}
             >
               {/* Header */}
-              <div style={{ padding: '18px 22px', borderBottom: '1px solid #1E293B', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: cfg.bg }}>
                 <div>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#F1F5F9' }}>{topicModalStudent.student.full_name}</div>
-                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{selectedTopic}</div>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: cfg.color }}>{topicModalStudent.student.full_name}</div>
+                  <div style={{ fontSize: '12px', color: C.textSecondary, marginTop: '2px' }}>{selectedTopic}</div>
                 </div>
-                <button onClick={() => setTopicModalStudent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px' }}>
+                <button onClick={() => setTopicModalStudent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: '4px' }}>
                   <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
                 </button>
               </div>
 
               {/* Stats */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: '#0B1120', borderBottom: '1px solid #1E293B' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: C.cardAlt, borderBottom: `1px solid ${C.border}` }}>
                 {[
-                  { label: 'Attempts', value: String(attempts.length), color: '#14B8A6' },
+                  { label: 'Attempts', value: String(attempts.length), color: C.teal },
                   { label: 'Topic Score', value: topicModalStudent.quizAvgScore != null ? `${topicModalStudent.quizAvgScore}%` : '—', color: cfg.color },
                   { label: 'Status', value: cfg.label, color: cfg.color },
                 ].map((s, i) => (
-                  <div key={s.label} style={{ padding: '14px', textAlign: 'center', borderLeft: i > 0 ? '1px solid #1E293B' : 'none' }}>
+                  <div key={s.label} style={{ padding: '14px', textAlign: 'center', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none' }}>
                     <div style={{ fontSize: '18px', fontWeight: 800, color: s.color }}>{s.value}</div>
-                    <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '4px' }}>{s.label}</div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '4px' }}>{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -852,7 +909,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
               {/* Chart */}
               <div style={{ padding: '16px 22px 20px' }}>
                 {attempts.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#64748B', fontSize: '13px' }}>No attempt data for this topic.</div>
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: C.textMuted, fontSize: '13px' }}>No attempt data for this topic.</div>
                 ) : (
                   <StackedBarChart
                     title="Attempt Outcome"
@@ -940,8 +997,8 @@ const DualRangeSlider: React.FC<DualRangeSliderProps> = ({ title, min, max, low,
     #10B981 ${highPct}%, #10B981 100%)`;
 
   return (
-    <div style={{ background: '#0B1120', borderRadius: '12px', padding: '16px 20px', border: '1px solid #1E293B' }}>
-      <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>
+    <div style={{ background: '#111827', borderRadius: '12px', padding: '16px 20px', border: '1px solid #1E293B', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+      <div style={{ fontSize: '12px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>
         {title}
       </div>
       <div style={{ position: 'relative', height: '24px', marginBottom: '4px' }}>
@@ -975,7 +1032,7 @@ const DualRangeSlider: React.FC<DualRangeSliderProps> = ({ title, min, max, low,
         ].map(({ color, text }) => (
           <div key={text} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
-            <span style={{ fontSize: '11px', color: '#64748B' }}>{text}</span>
+            <span style={{ fontSize: '11px', color: '#94A3B8' }}>{text}</span>
           </div>
         ))}
       </div>
@@ -1009,21 +1066,21 @@ const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#111827', borderRadius: '20px', border: `1.5px solid ${cfg.border}`, width: '100%', maxWidth: '520px', maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.6)', fontFamily: FONT }}
+        style={{ background: '#111827', borderRadius: '20px', border: `1.5px solid ${cfg.border}`, width: '100%', maxWidth: '520px', maxHeight: '82vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', fontFamily: FONT }}
       >
         {/* Header */}
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #1E293B', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #1E293B', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: cfg.bg }}>
           <div>
-            <div style={{ fontSize: '17px', fontWeight: 800, color: '#F1F5F9' }}>{student.full_name}</div>
-            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+            <div style={{ fontSize: '17px', fontWeight: 800, color: cfg.color }}>{student.full_name}</div>
+            <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>
               {[student.grade, student.section].filter(Boolean).join(' · ') || '—'}
             </div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: '99px', background: cfg.bg, marginTop: '8px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: '99px', background: '#1a2332', marginTop: '8px', border: `1px solid ${cfg.border}` }}>
               <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: cfg.color }} />
               <span style={{ fontSize: '11px', fontWeight: 700, color: cfg.color }}>{cfg.label}</span>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px', lineHeight: 1 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: '4px', lineHeight: 1 }}>
             <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
             </svg>
@@ -1044,31 +1101,31 @@ const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus
             {
               label: 'Exam avg score',
               value: totalExams > 0 ? (examAvg != null ? `${examAvg}%` : 'No attempt') : '—',
-              color: examAvg == null ? (totalExams > 0 ? '#F43F5E' : '#64748B')
+              color: examAvg == null ? (totalExams > 0 ? '#F43F5E' : '#94A3B8')
                 : examAvg >= thresholds.examSlightlyOff  ? '#10B981'
                 : examAvg >= thresholds.examCompletelyOff ? '#F59E0B'
                 : '#F43F5E',
             },
           ].map(({ label, value, color }) => (
-            <div key={label} style={{ background: '#0B1120', padding: '14px 16px', textAlign: 'center' }}>
+            <div key={label} style={{ background: '#1a2332', padding: '14px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: '15px', fontWeight: 800, color }}>{value}</div>
-              <div style={{ fontSize: '10px', color: '#64748B', marginTop: '3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+              <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
             </div>
           ))}
         </div>
 
         {/* Topic breakdown */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          <div style={{ padding: '16px 24px 8px', fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        <div style={{ overflowY: 'auto', flex: 1, background: '#111827' }}>
+          <div style={{ padding: '16px 24px 8px', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', background: '#111827' }}>
             Topic-wise Performance
           </div>
 
           {topics.length === 0 ? (
-            <div style={{ padding: '32px 24px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+            <div style={{ padding: '32px 24px', textAlign: 'center', color: '#94A3B8', fontSize: '13px', background: '#111827' }}>
               No topic-level data found for this student.
             </div>
           ) : (
-            <div style={{ padding: '0 24px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ padding: '0 24px 20px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#111827' }}>
               {topics.map(({ name, correct, total, pct, topicStatus, sources }) => {
                 const tcfg = STATUS_CONFIG[topicStatus];
                 return (
@@ -1077,9 +1134,9 @@ const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
                         <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: tcfg.color, flexShrink: 0 }} />
                         <span style={{ fontSize: '13px', fontWeight: 600, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                        <span style={{ fontSize: '11px', color: '#64748B', flexShrink: 0 }}>{correct}/{total}</span>
+                        <span style={{ fontSize: '11px', color: '#94A3B8', flexShrink: 0 }}>{correct}/{total}</span>
                         {sources.map(s => (
-                          <span key={s} style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: 600, background: s === 'Quiz' ? 'rgba(6,182,212,0.15)' : 'rgba(139,92,246,0.15)', color: s === 'Quiz' ? '#06B6D4' : '#A78BFA', flexShrink: 0 }}>{s}</span>
+                          <span key={s} style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: 600, background: s === 'Quiz' ? 'rgba(20,184,166,0.15)' : 'rgba(124,58,237,0.15)', color: s === 'Quiz' ? '#14B8A6' : '#7C3AED', flexShrink: 0 }}>{s}</span>
                         ))}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>

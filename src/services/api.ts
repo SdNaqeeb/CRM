@@ -285,6 +285,74 @@ export const examAPI = {
   },
 };
 
+// ============= Scheduled Assignment APIs =============
+export interface ScheduledAssignmentItem {
+  assignment_id: string;
+  assignment_code: string | null;
+  title: string | null;
+  status: string | null;
+  scheduled_date: string | null;
+  due_date: string | null;
+  class_id: number | null;
+  class_name: string | null;
+  section_id: number | null;
+  section_name: string | null;
+  subject_id: number | null;
+  subject_name: string | null;
+  topic_id: number | null;
+  topic_name: string | null;
+  subtopic_code: string | null;
+  question_count: number;
+  assigned_count: number;
+  viewed_count: number;
+  submitted_count: number;
+  missed_count: number;
+  cancelled_count: number;
+}
+
+export interface ScheduledAssignmentStudentResult {
+  student_id: number;
+  student_name: string;
+  username: string | null;
+  roll_number: string | null;
+  assignment_status: string | null;
+  submission_status: string | null;
+  score: number | null;
+  max_possible_score: number | null;
+  percentage: number | null;
+  grade: string | null;
+}
+
+export const scheduledAssignmentAPI = {
+  getByUsername: async (username: string, limit: number = 500) => {
+    const response = await api.post('/api/external-data/scheduled-assignments/by-username', { username, limit });
+    return response.data as {
+      teacher_id: number;
+      username: string;
+      school_id: number | null;
+      school_name: string | null;
+      school_code: string | null;
+      total: number;
+      items: ScheduledAssignmentItem[];
+    };
+  },
+
+  getResultsByCode: async (assignment_code: string, limit: number = 1000) => {
+    const response = await api.post('/api/external-data/scheduled-assignments/results/by-assignment-code', { assignment_code, limit });
+    return response.data as {
+      assignment_id: string;
+      assignment_code: string | null;
+      title: string | null;
+      topic_name: string | null;
+      evaluated_count: number;
+      average_score: number | null;
+      average_percentage: number | null;
+      total: number;
+      items: ScheduledAssignmentStudentResult[];
+    };
+  },
+};
+
 // ============= Health Check =============
 export const healthAPI = {
   getStatus: async () => {
