@@ -97,6 +97,7 @@ const TeacherDashboard: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showGreeting, setShowGreeting] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'students' | 'daily-quizzes' | 'weekly-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('students');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
@@ -368,6 +369,45 @@ const TeacherDashboard: React.FC = () => {
     });
   }, [dashboardData, testPrepByStudentId, prepChapterFilter, prepClassFilter, prepSectionFilter, prepMinAttempts, prepMinScore]);
 
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const displayName = user?.full_name || user?.username || 'Teacher';
+  const initials = displayName.split(/\s+|@/).filter(Boolean).slice(0, 2).map((w: string) => w[0].toUpperCase()).join('');
+
+  useEffect(() => {
+    if (!showGreeting) return;
+    const t = setTimeout(() => setShowGreeting(false), 2000);
+    return () => clearTimeout(t);
+  }, [showGreeting]);
+
+  if (showGreeting) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 64px)', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+        <div style={{
+          background: C.card, borderRadius: '24px', border: `1px solid ${C.border}`,
+          boxShadow: C.shadowLg, padding: '56px 64px', textAlign: 'center',
+          maxWidth: '480px', width: '100%',
+        }}>
+          <div style={{
+            width: '72px', height: '72px', borderRadius: '20px', margin: '0 auto 28px',
+            background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '26px', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em',
+            boxShadow: `0 0 0 6px rgba(20,184,166,0.15)`,
+          }}>
+            {initials}
+          </div>
+          <div style={{ fontSize: '15px', color: C.textMuted, fontWeight: 600, marginBottom: '10px', letterSpacing: '0.02em' }}>
+            {greeting},
+          </div>
+          <div style={{ fontSize: '34px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.15 }}>
+            {displayName}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', fontFamily: FONT, background: C.bg }}>
@@ -400,9 +440,6 @@ const TeacherDashboard: React.FC = () => {
   if (!dashboardData) return null;
 
   const teacherLabel = dashboardData.teacher_name || teacherUsername || 'Teacher';
-  const initials = teacherLabel.split(/\s+|@/).filter(Boolean).slice(0, 2).map((w: string) => w[0].toUpperCase()).join('');
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   const filteredStudents = dayFilter === null
     ? dashboardData.students
@@ -423,12 +460,6 @@ const TeacherDashboard: React.FC = () => {
 
   const scoreColor = (s: number) => s >= 70 ? '#10B981' : s >= 50 ? '#F59E0B' : '#F43F5E';
 
-  const metricCards = [
-    { label: 'Total Students', value: dashboardData.total_students, color: '#14B8A6', bg: 'rgba(20,184,166,0.1)', icon: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="9" cy="7" r="4" strokeLinecap="round" strokeLinejoin="round"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" strokeLinecap="round" strokeLinejoin="round"/></svg>, sub: 'Enrolled' },
-    { label: 'Active This Week', value: dashboardData.active_students, color: '#10B981', bg: 'rgba(16,185,129,0.1)', icon: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" strokeLinecap="round" strokeLinejoin="round"/></svg>, sub: 'Engaged' },
-    { label: 'At Risk', value: dashboardData.at_risk_students, color: '#F43F5E', bg: 'rgba(244,63,94,0.1)', icon: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" strokeLinecap="round" strokeLinejoin="round"/><line x1="12" y1="9" x2="12" y2="13" strokeLinecap="round"/><line x1="12" y1="17" x2="12.01" y2="17" strokeLinecap="round"/></svg>, sub: 'Need attention' },
-    { label: 'Inactive', value: dashboardData.inactive_students, color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', icon: <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round"/><polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round"/></svg>, sub: 'Not logged in' },
-  ];
 
   return (
     <div style={{ minHeight: 'calc(100vh - 64px)', fontFamily: FONT, background: C.bg }}>
@@ -436,100 +467,96 @@ const TeacherDashboard: React.FC = () => {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div style={{ background: C.cardBg, borderBottom: `1px solid ${C.border}`, boxShadow: C.shadow }}>
         <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '18px 28px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+          {/* ── Header row: Greeting + Donut card + Actions ─────────────────── */}
+          {(() => {
+            const tot = dashboardData.total_students || 1;
+            const act = dashboardData.active_students;
+            const inact = tot - act;
+            const R = 52, SW = 11, CX = 64, CY = 64, SZ = 128;
+            const circ = 2 * Math.PI * R;
+            const segs = [{ v: act, color: C.teal }, { v: inact, color: C.amber }];
+            let acc = 0;
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px', flexWrap: 'wrap' }}>
 
-            {/* Left: Avatar + greeting */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '52px', height: '52px', borderRadius: '16px', flexShrink: 0,
-                background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em',
-                boxShadow: `0 0 0 3px rgba(20,184,166,0.2)`,
-              }}>
-                {initials}
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', color: C.textMuted, fontWeight: 600, marginBottom: '2px' }}>{greeting}</div>
-                <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.1 }}>{teacherLabel}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
-                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: C.green, display: 'inline-block' }} />
-                  <span style={{ fontSize: '13px', color: C.textSecondary, fontWeight: 500 }}>Teacher Dashboard</span>
-                  {user?.school_code && (
-                    <span style={{ padding: '2px 9px', borderRadius: '99px', background: 'rgba(167,139,250,0.12)', color: '#A78BFA', fontSize: '12px', fontWeight: 700 }}>
-                      {user.school_code.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right: actions */}
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              {dashboardData.recent_alerts.length > 0 && (
-                <div style={{ position: 'relative' }}>
+                {/* Left: Avatar + greeting */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{
-                    width: '38px', height: '38px', borderRadius: '12px',
-                    background: C.amberSoft, border: `1px solid ${C.border}`,
+                    width: '52px', height: '52px', borderRadius: '16px', flexShrink: 0,
+                    background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em',
+                    boxShadow: `0 0 0 3px rgba(20,184,166,0.2)`,
                   }}>
-                    <DashboardIcon name="bell" size={16} color={C.amber} />
+                    {initials}
                   </div>
-                  <span style={{
-                    position: 'absolute', top: '-5px', right: '-5px',
-                    width: '18px', height: '18px', borderRadius: '50%',
-                    background: C.red, fontSize: '11px', fontWeight: 800,
-                    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    border: `2px solid ${C.cardBg}`,
-                  }}>
-                    {dashboardData.recent_alerts.length}
-                  </span>
+                  <div>
+                    <div style={{ fontSize: '13px', color: C.textMuted, fontWeight: 600, marginBottom: '2px' }}>{greeting}</div>
+                    <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.1 }}>{teacherLabel}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
+                      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: C.green, display: 'inline-block' }} />
+                      <span style={{ fontSize: '13px', color: C.textSecondary, fontWeight: 500 }}>Teacher Dashboard</span>
+                      {user?.school_code && (
+                        <span style={{ padding: '2px 9px', borderRadius: '99px', background: 'rgba(167,139,250,0.12)', color: '#A78BFA', fontSize: '12px', fontWeight: 700 }}>
+                          {user.school_code.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-              <button
-                onClick={loadDashboard}
-                disabled={refreshing}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  padding: '9px 18px', borderRadius: '12px', border: 'none',
-                  background: C.teal, color: '#fff', fontSize: '14px', fontWeight: 700,
-                  cursor: refreshing ? 'wait' : 'pointer', fontFamily: FONT,
-                  boxShadow: `0 2px 8px rgba(20,184,166,0.3)`,
-                  opacity: refreshing ? 0.6 : 1, transition: 'opacity 0.2s',
-                }}
-              >
-                <DashboardIcon name="refresh" size={13} color="#fff" />
-                {refreshing ? 'Refreshing…' : 'Refresh'}
-              </button>
-            </div>
-          </div>
 
-          {/* ── Metric cards ──────────────────────────────────────────────────── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginTop: '18px' }}>
-            {metricCards.map((m) => (
-              <div key={m.label} style={{
-                background: C.cardBg, border: `1px solid ${C.border}`, borderLeft: `4px solid ${m.color}`,
-                borderRadius: '12px', padding: '14px 16px',
-                display: 'flex', alignItems: 'center', gap: '14px',
-                boxShadow: C.shadow, transition: 'box-shadow 0.15s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.boxShadow = C.shadowLg)}
-              onMouseLeave={e => (e.currentTarget.style.boxShadow = C.shadow)}
-              >
+                {/* Center: single donut card */}
                 <div style={{
-                  width: '40px', height: '40px', borderRadius: '10px',
-                  background: m.bg, color: m.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: '24px',
+                  background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: '20px',
+                  padding: '16px 28px', boxShadow: C.shadow,
                 }}>
-                  {m.icon}
+                  {/* Donut */}
+                  <div style={{ position: 'relative', width: SZ, height: SZ, flexShrink: 0 }}>
+                    <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`}>
+                      <circle cx={CX} cy={CY} r={R} fill="none" stroke={C.border} strokeWidth={SW} />
+                      {segs.map((seg, i) => {
+                        const frac = Math.min(seg.v / tot, 1);
+                        const dash = frac * circ;
+                        const off = -acc;
+                        acc += dash;
+                        return (
+                          <circle key={i} cx={CX} cy={CY} r={R}
+                            fill="none" stroke={seg.color} strokeWidth={SW}
+                            strokeDasharray={`${dash} ${circ}`}
+                            strokeDashoffset={off}
+                            transform={`rotate(-90 ${CX} ${CY})`}
+                          />
+                        );
+                      })}
+                    </svg>
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span style={{ fontSize: '11px', color: C.textMuted, fontWeight: 600, letterSpacing: '0.02em' }}>Total</span>
+                      <span style={{ fontSize: '26px', fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: FONT_SERIF }}>{tot}</span>
+                    </div>
+                  </div>
+                  {/* Legend */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: C.textSecondary }}>Students</div>
+                    {[
+                      { label: 'Active (This Week)', color: C.teal, v: act },
+                      { label: 'Inactive', color: C.amber, v: inact },
+                    ].map((l) => (
+                      <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: l.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: '12px', color: C.textMuted, fontWeight: 500, minWidth: 120 }}>{l.label}</span>
+                        <span style={{ fontSize: '15px', color: C.text, fontWeight: 800, fontFamily: FONT_SERIF }}>{l.v}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: '26px', fontWeight: 800, color: m.color, lineHeight: 1, fontFamily: FONT_SERIF }}>{m.value}</div>
-                  <div style={{ fontSize: '13px', color: C.textSecondary, fontWeight: 600, marginTop: '3px' }}>{m.label}</div>
-                </div>
+
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
       </div>
 
