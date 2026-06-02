@@ -10,7 +10,7 @@ import StudentDetailModal from '../components/StudentDetailModal';
 import ActivityFeed from '../components/ActivityFeed';
 import WeeklyExamResults from '../components/WeeklyExamResults';
 import JEEExamResults from '../components/JEEExamResults';
-import StudentTrackGrid from '../components/StudentTrackGrid';
+import StudentTrackGrid, { TrackPreloadData } from '../components/StudentTrackGrid';
 import mockData from '../mock_data.json';
 import TimelineStrip from '../components/TimelineStrip';
 import { TimelineEntry } from '../components/TeacherTimeline';
@@ -20,17 +20,17 @@ const FONT = '"Plus Jakarta Sans", system-ui, sans-serif';
 const FONT_SERIF = '"Source Serif 4", Georgia, serif';
 
 const C = {
-  bg: '#0B1120', cardBg: '#111827', cardAlt: '#1a2332',
-  border: '#1E293B', borderLight: '#334155',
-  text: '#F1F5F9', textSecondary: '#64748B', textMuted: '#94A3B8',
-  teal: '#14B8A6', tealDark: '#0d9488', tealSoft: 'rgba(20,184,166,0.15)',
-  green: '#10B981', greenSoft: 'rgba(16,185,129,0.15)',
-  amber: '#F59E0B', amberSoft: 'rgba(245,158,11,0.15)',
-  blue: '#3B82F6', blueSoft: 'rgba(59,130,246,0.12)',
-  red: '#F43F5E', redSoft: 'rgba(244,63,94,0.15)',
-  card: '#111827',
-  shadow: '0 4px 12px rgba(0,0,0,0.15)',
-  shadowLg: '0 8px 24px rgba(0,0,0,0.2)',
+  bg: '#EDE9FE', cardBg: '#FFFFFF', cardAlt: '#F5F3FF',
+  border: '#E2E8F0', borderLight: '#CBD5E1',
+  text: '#0F172A', textSecondary: '#475569', textMuted: '#64748B',
+  teal: '#7C3AED', tealDark: '#6D28D9', tealSoft: 'rgba(124,58,237,0.10)',
+  green: '#10B981', greenSoft: 'rgba(16,185,129,0.12)',
+  amber: '#F59E0B', amberSoft: 'rgba(245,158,11,0.12)',
+  blue: '#3B82F6', blueSoft: 'rgba(59,130,246,0.10)',
+  red: '#F43F5E', redSoft: 'rgba(244,63,94,0.12)',
+  card: '#FFFFFF',
+  shadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.05)',
+  shadowLg: '0 4px 6px rgba(0,0,0,0.04), 0 10px 24px rgba(0,0,0,0.08)',
 };
 
 function formatDateShort(d: string) {
@@ -123,6 +123,7 @@ const TeacherDashboard: React.FC = () => {
   const [prepMinAttempts, setPrepMinAttempts] = useState<number>(1);
   const [prepMinScore, setPrepMinScore] = useState<number>(0);
 
+  const [trackPreload, setTrackPreload] = useState<TrackPreloadData | undefined>(undefined);
   const [scheduledAssignments, setScheduledAssignments] = useState<ScheduledAssignmentItem[] | null>(null);
   const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
 
@@ -269,6 +270,38 @@ const TeacherDashboard: React.FC = () => {
 
   useEffect(() => { loadDashboard(); loadScheduledAssignments(); }, [teacherUsername]);
 
+  // Pre-fetch StudentTrackGrid Wave 1 data during the greeting screen so the
+  // skeleton resolves faster once the main dashboard is ready.
+  useEffect(() => {
+    if (!teacherUsername || !user?.school_code) return;
+    const sc = user.school_code;
+    const base = process.env.REACT_APP_API_URL || 'https://crm.smartlearners.ai/backend-api/';
+    Promise.all([
+      fetch(`${base}api/external-data/user-sessions/by-school-code`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ school_code: sc, limit: 5000 }),
+      }),
+      fetch(`${base}api/external-data/quiz-homework/by-username`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: teacherUsername, limit: 7 }),
+      }),
+      fetch(`${base}api/external-data/teacher-exams/by-username`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: teacherUsername, limit: 5 }),
+      }),
+    ])
+      .then(([r1, r2, r3]) => Promise.all([r1.json(), r2.json(), r3.json()]))
+      .then(([sessionData, homeworkData, examData]) => {
+        setTrackPreload({
+          sessions: sessionData.items ?? [],
+          homeworks: homeworkData.items ?? [],
+          exams: examData.items ?? [],
+          resolvedSchoolCode: homeworkData.school_code || sc,
+        });
+      })
+      .catch(() => { /* silent — StudentTrackGrid falls back to its own fetch */ });
+  }, [teacherUsername, user?.school_code]);
+
   const handleSendAlert = (studentId: number) => {
     setSelectedStudentId(studentId);
     setShowAlertModal(true);
@@ -382,10 +415,10 @@ const TeacherDashboard: React.FC = () => {
 
   if (showGreeting) {
     return (
-      <div style={{ minHeight: 'calc(100vh - 64px)', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+      <div style={{ minHeight: 'calc(100vh - 64px)', background: C.bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', fontFamily: FONT }}>
         <div style={{
           background: C.card, borderRadius: '24px', border: `1px solid ${C.border}`,
-          boxShadow: C.shadowLg, padding: '56px 64px', textAlign: 'center',
+          boxShadow: C.shadowLg, padding: '48px 64px', textAlign: 'center',
           maxWidth: '480px', width: '100%',
         }}>
           <div style={{
@@ -393,15 +426,18 @@ const TeacherDashboard: React.FC = () => {
             background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '26px', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em',
-            boxShadow: `0 0 0 6px rgba(20,184,166,0.15)`,
+            boxShadow: `0 0 0 8px rgba(124,58,237,0.12)`,
           }}>
             {initials}
           </div>
-          <div style={{ fontSize: '15px', color: C.textMuted, fontWeight: 600, marginBottom: '10px', letterSpacing: '0.02em' }}>
+          <div style={{ fontSize: '14px', color: C.textMuted, fontWeight: 500, marginBottom: '8px', letterSpacing: '0.01em' }}>
             {greeting},
           </div>
-          <div style={{ fontSize: '34px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.15 }}>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.15, marginBottom: '14px' }}>
             {displayName}
+          </div>
+          <div style={{ fontSize: '14px', color: C.textSecondary, fontWeight: 500, lineHeight: 1.6 }}>
+            Hope you are having a good day! 🌟
           </div>
         </div>
       </div>
@@ -477,7 +513,7 @@ const TeacherDashboard: React.FC = () => {
             const segs = [{ v: act, color: C.teal }, { v: inact, color: C.amber }];
             let acc = 0;
             return (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '48px', flexWrap: 'wrap' }}>
 
                 {/* Left: Avatar + greeting */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -497,7 +533,7 @@ const TeacherDashboard: React.FC = () => {
                       <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: C.green, display: 'inline-block' }} />
                       <span style={{ fontSize: '13px', color: C.textSecondary, fontWeight: 500 }}>Teacher Dashboard</span>
                       {user?.school_code && (
-                        <span style={{ padding: '2px 9px', borderRadius: '99px', background: 'rgba(167,139,250,0.12)', color: '#A78BFA', fontSize: '12px', fontWeight: 700 }}>
+                        <span style={{ padding: '2px 9px', borderRadius: '99px', background: C.tealSoft, color: C.teal, fontSize: '12px', fontWeight: 700 }}>
                           {user.school_code.toUpperCase()}
                         </span>
                       )}
@@ -583,6 +619,7 @@ const TeacherDashboard: React.FC = () => {
             externalTopic={trackTopic}
             onExternalTopicChange={setTrackTopic}
             scheduledAssignments={scheduledAssignments ?? []}
+            preload={trackPreload}
           />
         </div>
 
@@ -964,10 +1001,10 @@ const TeacherDashboard: React.FC = () => {
           )}
           </div>{/* end left col */}
 
-          {/* RIGHT: Sidebar */}
-          <div style={{ width: '300px', flexShrink: 0, position: 'sticky', top: '24px', alignSelf: 'flex-start' }}>
+          {/* RIGHT: Sidebar — temporarily hidden */}
+          {/* <div style={{ width: '300px', flexShrink: 0, position: 'sticky', top: '24px', alignSelf: 'flex-start' }}>
 
-            {/* Quick actions */}
+            Quick actions
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '16px', padding: '16px', marginBottom: '16px', boxShadow: C.shadow }}>
               <div style={{ fontSize: '12px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '12px' }}>
                 Quick Actions
@@ -1002,7 +1039,7 @@ const TeacherDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Recent Alerts panel */}
+            Recent Alerts panel
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: '16px', overflow: 'hidden', boxShadow: C.shadow }}>
               <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '8px', background: C.cardAlt }}>
                 <DashboardIcon name="bell" size={15} color={C.amber} />
@@ -1057,7 +1094,7 @@ const TeacherDashboard: React.FC = () => {
               )}
             </div>
 
-          </div>{/* end right sidebar */}
+          </div> */}{/* end right sidebar — temporarily hidden */}
         </div>{/* end two-column */}
       </div>{/* end main content */}
 

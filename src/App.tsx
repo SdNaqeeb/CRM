@@ -41,23 +41,24 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
     const role = user?.role;
     if (role === UserRole.ORCALEX_ADMIN) return { label: 'Admin', bg: '#7c3aed', fg: '#fff' };
     if (role === UserRole.SCHOOL_ADMIN) return { label: 'School', bg: '#0d9488', fg: '#fff' };
-    return { label: 'Teacher', bg: '#1e3a5f', fg: '#38bdf8' };
+    return { label: 'Teacher', bg: 'rgba(124,58,237,0.12)', fg: '#7C3AED' };
   };
 
   const badge = getRoleBadge();
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0B1120' }}>
+    <div style={{ minHeight: '100vh', background: '#EDE9FE' }}>
       {/* Navigation */}
       <nav
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 40,
-          background: 'rgba(11,17,32,0.95)',
+          background: 'rgba(255,255,255,0.95)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
-          borderBottom: '1px solid #1E293B',
+          borderBottom: '1px solid #E2E8F0',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
         }}
       >
         <div
@@ -77,7 +78,7 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
               style={{
                 fontSize: '17px',
                 fontWeight: 700,
-                color: '#F1F5F9',
+                color: '#7C3AED',
                 letterSpacing: '-0.02em',
                 fontFamily: "'Plus Jakarta Sans', sans-serif",
               }}
@@ -88,7 +89,7 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
               style={{
                 fontSize: '17px',
                 fontWeight: 400,
-                color: '#64748B',
+                color: '#94A3B8',
                 marginLeft: '6px',
                 fontFamily: "'Plus Jakarta Sans', sans-serif",
               }}
@@ -104,7 +105,7 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
                 style={{
                   fontSize: '14px',
                   fontWeight: 600,
-                  color: '#F1F5F9',
+                  color: '#0F172A',
                   lineHeight: '1.3',
                 }}
               >
@@ -134,14 +135,14 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
                 width: '36px',
                 height: '36px',
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #1E293B, #334155)',
+                background: 'linear-gradient(135deg, #6D28D9, #7C3AED)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontSize: '14px',
                 fontWeight: 700,
-                color: '#94A3B8',
-                border: '1px solid #334155',
+                color: '#fff',
+                border: '2px solid rgba(124,58,237,0.2)',
               }}
             >
               {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
@@ -153,9 +154,9 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
               style={{
                 padding: '8px 16px',
                 borderRadius: '10px',
-                border: '1.5px solid #334155',
+                border: '1.5px solid #E2E8F0',
                 background: 'transparent',
-                color: '#94A3B8',
+                color: '#64748B',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -165,11 +166,11 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#F43F5E';
                 e.currentTarget.style.color = '#F43F5E';
-                e.currentTarget.style.background = 'rgba(244,63,94,0.1)';
+                e.currentTarget.style.background = 'rgba(244,63,94,0.07)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = '#334155';
-                e.currentTarget.style.color = '#94A3B8';
+                e.currentTarget.style.borderColor = '#E2E8F0';
+                e.currentTarget.style.color = '#64748B';
                 e.currentTarget.style.background = 'transparent';
               }}
             >

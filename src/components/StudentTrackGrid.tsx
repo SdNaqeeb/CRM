@@ -1,19 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StudentEngagementSummary } from '../types';
-import { StackedBarChart, LineChart } from './AnalyticsCharts';
+import { StackedBarChart } from './AnalyticsCharts';
 import { ScheduledAssignmentItem } from '../services/api';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const API_BASE = process.env.REACT_APP_API_URL || 'https://crm.smartlearners.ai/backend-api/';
 
 const C = {
-  bg: '#0B1120', card: '#111827', cardAlt: '#1a2332',
-  border: '#1E293B', borderStrong: '#334155',
-  text: '#F1F5F9', textSecondary: '#64748B', textMuted: '#94A3B8',
-  teal: '#14B8A6', tealSoft: 'rgba(20,184,166,0.15)',
-  blue: '#3B82F6', blueSoft: 'rgba(59,130,246,0.12)',
-  shadow: '0 4px 12px rgba(0,0,0,0.15)',
-  shadowLg: '0 8px 24px rgba(0,0,0,0.2)',
+  bg: '#EDE9FE', card: '#FFFFFF', cardAlt: '#F5F3FF',
+  border: '#E2E8F0', borderStrong: '#CBD5E1',
+  text: '#0F172A', textSecondary: '#475569', textMuted: '#64748B',
+  teal: '#7C3AED', tealSoft: 'rgba(124,58,237,0.10)',
+  blue: '#3B82F6', blueSoft: 'rgba(59,130,246,0.10)',
+  shadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.05)',
+  shadowLg: '0 4px 6px rgba(0,0,0,0.04), 0 10px 24px rgba(0,0,0,0.08)',
 };
 
 interface SessionItem {
@@ -23,6 +23,13 @@ interface SessionItem {
   session_duration_seconds: number | null;
 }
 
+export interface TrackPreloadData {
+  sessions: SessionItem[];
+  homeworks: { id: number }[];
+  exams: { exam_id: number }[];
+  resolvedSchoolCode: string;
+}
+
 interface StudentTrackGridProps {
   students: StudentEngagementSummary[];
   schoolCode: string;
@@ -30,6 +37,7 @@ interface StudentTrackGridProps {
   externalTopic?: string;
   onExternalTopicChange?: (topic: string) => void;
   scheduledAssignments?: ScheduledAssignmentItem[];
+  preload?: TrackPreloadData;
 }
 
 type TrackStatus = 'completely-off' | 'slightly-off' | 'on-track';
@@ -105,7 +113,7 @@ function computeStatus(
   return 'on-track';
 }
 
-const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCode, teacherUsername, externalTopic, onExternalTopicChange, scheduledAssignments }) => {
+const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCode, teacherUsername, externalTopic, onExternalTopicChange, scheduledAssignments, preload }) => {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quizScoreMap, setQuizScoreMap] = useState<Map<number, { total: number; count: number }>>(new Map());
   const [quizTopicMap, setQuizTopicMap] = useState<Map<number, Map<string, { correct: number; total: number }>>>(new Map());
@@ -128,6 +136,17 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTopic]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (topicDropdownRef.current && !topicDropdownRef.current.contains(e.target as Node)) {
+        setTopicDropdownOpen(false);
+        setTopicSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   const [assignmentScoreMap, setAssignmentScoreMap] = useState<Map<number, number>>(new Map());
   const [examScoreMap, setExamScoreMap] = useState<Map<number, { total: number; count: number }>>(new Map());
   const [totalExams, setTotalExams] = useState(0);
@@ -135,40 +154,56 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [draftThresholds, setDraftThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [selectedBarStatus, setSelectedBarStatus] = useState<TrackStatus | null>(null);
+  const [cardPage, setCardPage] = useState(0);
+  const [topicDropdownOpen, setTopicDropdownOpen] = useState(false);
+  const [topicSearch, setTopicSearch] = useState('');
+  const topicDropdownRef = useRef<HTMLDivElement>(null);
   const studentCardsRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [sessionRes, homeworkRes, examRes] = await Promise.all([
-          fetch(`${API_BASE}api/external-data/user-sessions/by-school-code`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ school_code: schoolCode, limit: 5000 }),
-          }),
-          fetch(`${API_BASE}api/external-data/quiz-homework/by-username`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: teacherUsername, limit: 7 }),
-          }),
-          fetch(`${API_BASE}api/external-data/teacher-exams/by-username`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: teacherUsername, limit: 5 }),
-          }),
-        ]);
+        // Wave 1: use preloaded data if available (fetched during greeting screen),
+        // otherwise fetch now.
+        let wave1Sessions: SessionItem[];
+        let homeworks: { id: number }[];
+        let exams: { exam_id: number }[];
+        let resolvedSchoolCode: string;
 
-        const sessionData = await sessionRes.json();
-        setSessions(sessionData.items ?? []);
+        if (preload) {
+          wave1Sessions    = preload.sessions;
+          homeworks        = preload.homeworks;
+          exams            = preload.exams;
+          resolvedSchoolCode = preload.resolvedSchoolCode;
+        } else {
+          const [sessionRes, homeworkRes, examRes] = await Promise.all([
+            fetch(`${API_BASE}api/external-data/user-sessions/by-school-code`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ school_code: schoolCode, limit: 5000 }),
+            }),
+            fetch(`${API_BASE}api/external-data/quiz-homework/by-username`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: teacherUsername, limit: 7 }),
+            }),
+            fetch(`${API_BASE}api/external-data/teacher-exams/by-username`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: teacherUsername, limit: 5 }),
+            }),
+          ]);
+          const sessionData  = await sessionRes.json();
+          const homeworkData = await homeworkRes.json();
+          const examData     = await examRes.json();
+          wave1Sessions      = sessionData.items ?? [];
+          homeworks          = homeworkData.items ?? [];
+          exams              = examData.items ?? [];
+          resolvedSchoolCode = homeworkData.school_code || schoolCode || '';
+        }
 
-        const homeworkData = await homeworkRes.json();
-        const homeworks: { id: number }[] = homeworkData.items ?? [];
+        setSessions(wave1Sessions);
         setHasQuizData(homeworks.length > 0);
-
-        const resolvedSchoolCode: string = homeworkData.school_code || schoolCode || '';
-
-        const examData = await examRes.json();
-        const exams: { exam_id: number }[] = examData.items ?? [];
         setTotalExams(exams.length);
 
         const [submissionResults, attemptResults] = await Promise.all([
@@ -435,18 +470,6 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     };
   }, [studentStatuses, classFilter]);
 
-  // ── Graph 1: Daily unique student logins over last 7 days ─────────────────
-  const dailyLoginData = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      const dayStr = date.toISOString().split('T')[0];
-      const label = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' });
-      const count = new Set(sessions.filter(s => s.login_time?.startsWith(dayStr)).map(s => s.username)).size;
-      return { label, value: count };
-    });
-  }, [sessions]);
-
   // ── Graph 3: Class-wise track status breakdown ─────────────────────────────
   const classwiseBreakdown = useMemo(() => {
     const byClass = new Map<string, { 'On Track': number; 'Slightly Off': number; 'Completely Off': number }>();
@@ -474,14 +497,49 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   }, [studentStatuses, selectedBarStatus, classFilter]);
 
   if (loading) {
+    const sk: React.CSSProperties = {
+      background: 'linear-gradient(90deg, #F5F3FF 25%, #EDE9FE 50%, #F5F3FF 75%)',
+      backgroundSize: '200% 100%',
+      animation: 'sk-shimmer 1.5s infinite linear',
+      borderRadius: 6,
+    };
     return (
-      <div style={{ textAlign: 'center', padding: '60px 0' }}>
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: C.teal, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+      <div>
+        <style>{`@keyframes sk-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+
+        {/* Bar chart skeleton */}
+        <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: '20px 24px 16px', marginBottom: 20, boxShadow: C.shadow }}>
+          <div style={{ ...sk, height: 11, width: '28%', margin: '0 auto 24px' }} />
+          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end', justifyContent: 'center', height: 140 }}>
+            {[110, 160, 80].map((h, i) => (
+              <div key={i} style={{ width: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <div style={{ ...sk, width: 56, height: h, borderRadius: '8px 8px 4px 4px' }} />
+                <div style={{ ...sk, width: 42, height: 10 }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+            {[64, 52, 56].map((w, i) => <div key={i} style={{ ...sk, height: 10, width: w }} />)}
+          </div>
+        </div>
+
+        {/* Student card skeletons */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, padding: 16, boxShadow: C.shadow, overflow: 'hidden' }}>
+              {/* top accent */}
+              <div style={{ ...sk, height: 4, borderRadius: 4, marginBottom: 14, width: '100%' }} />
+              {/* name */}
+              <div style={{ ...sk, height: 13, width: '72%', marginBottom: 6 }} />
+              {/* section */}
+              <div style={{ ...sk, height: 10, width: '40%', marginBottom: 18 }} />
+              {/* stat rows */}
+              {[100, 100, 80].map((w, j) => (
+                <div key={j} style={{ ...sk, height: 8, width: `${w}%`, marginBottom: 8 }} />
+              ))}
+            </div>
           ))}
         </div>
-        <p style={{ margin: 0, fontSize: '14px', color: C.textMuted, fontFamily: FONT }}>Loading tracking data...</p>
       </div>
     );
   }
@@ -515,9 +573,10 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         ))}
       </div>
 
-      {/* ── Bar Chart ── */}
-      <div style={{ background: C.card, borderRadius: '16px', border: `1px solid ${C.border}`, padding: '20px 24px 16px', marginBottom: '20px', boxShadow: C.shadowLg }}>
-        <div style={{ fontSize: '12px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px', textAlign: 'center' }}>
+      {/* ── Bar Charts row ── */}
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
+      <div style={{ flex: 1, background: C.card, borderRadius: '16px', border: `1px solid ${C.border}`, padding: '20px 24px 16px', boxShadow: C.shadowLg }}>
+        <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px', textAlign: 'center' }}>
           Track Status Overview
           {selectedTopic !== 'All' && (
             <span style={{ marginLeft: '8px', color: C.teal, fontWeight: 600, textTransform: 'none', fontSize: '12px' }}>· {selectedTopic}</span>
@@ -540,6 +599,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                 onClick={() => {
                   const next = isSelected ? null : status;
                   setSelectedBarStatus(next);
+                  setCardPage(0);
                   if (next) setTimeout(() => studentCardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
                 }}
                 style={{ width: '56px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', position: 'relative' }}
@@ -635,63 +695,130 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         </div>
       </div>
 
-      {/* ── Additional Analytics ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-        <LineChart
-          title="Daily Logins — Last 7 Days"
-          data={dailyLoginData}
-          height={240}
-          color="#3B82F6"
-          showXAxisTicks
-          tooltipValueFormatter={(v) => [`${v} students`, 'Logins']}
-        />
+        {/* Class-wise Tracking — horizontal bars, right column */}
         {classwiseBreakdown.length > 0 && (
-          <StackedBarChart
-            title="Class-wise Track Status"
-            data={classwiseBreakdown}
-            height={240}
-            showXAxisLabels
-            segments={[
-              { key: 'On Track',       label: 'On Track',       color: '#10B981' },
-              { key: 'Slightly Off',   label: 'Slightly Off',   color: '#F59E0B' },
-              { key: 'Completely Off', label: 'Completely Off', color: '#F43F5E' },
-            ]}
-          />
-        )}
-      </div>
-
-      {/* ── Topic filter row ── */}
-      {allTopics.length > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', padding: '12px 16px', background: C.card, borderRadius: '12px', border: `1px solid ${C.border}`, flexWrap: 'wrap', boxShadow: C.shadow }}>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
-            Topic
-          </span>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', flex: 1 }}>
-            {allTopics.map(topic => (
-              <button
-                key={topic}
-                onClick={() => { setSelectedTopic(topic); setSelectedBarStatus(null); }}
-                style={{
-                  padding: '4px 12px', borderRadius: '99px', cursor: 'pointer', fontFamily: FONT,
-                  border: selectedTopic === topic ? `1.5px solid ${C.teal}` : `1.5px solid ${C.border}`,
-                  background: selectedTopic === topic ? C.tealSoft : 'transparent',
-                  color: selectedTopic === topic ? C.teal : C.textSecondary,
-                  fontSize: '12px', fontWeight: selectedTopic === topic ? 700 : 500,
-                  transition: 'all 0.15s', whiteSpace: 'nowrap',
-                }}
-              >
-                {topic}
-              </button>
-            ))}
+          <div style={{ flex: 1 }}>
+            <StackedBarChart
+              title="Class-wise Tracking"
+              data={classwiseBreakdown}
+              height={340}
+              showXAxisLabels
+              horizontal
+              maxBarSize={18}
+              barCategoryGap="30%"
+              segments={[
+                { key: 'On Track',       label: 'On Track',       color: '#10B981' },
+                { key: 'Slightly Off',   label: 'Slightly Off',   color: '#F59E0B' },
+                { key: 'Completely Off', label: 'Completely Off', color: '#F43F5E' },
+              ]}
+            />
           </div>
-          {selectedTopic !== 'All' && (
+        )}
+      </div>{/* end flex row */}
+
+      {/* ── Topic filter dropdown ── */}
+      {allTopics.length > 1 && (
+        <div style={{ marginBottom: '16px', background: C.card, borderRadius: '12px', border: `1px solid ${C.border}`, padding: '14px 18px', boxShadow: C.shadow }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px' }}>
+            Filter students by topic
+          </div>
+          <div ref={topicDropdownRef} style={{ position: 'relative' }}>
+            {/* Trigger */}
             <button
-              onClick={() => { setSelectedTopic('All'); setSelectedBarStatus(null); }}
-              style={{ padding: '4px 10px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}
+              onClick={() => { setTopicDropdownOpen(o => !o); setTopicSearch(''); }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '9px 14px', borderRadius: '10px', cursor: 'pointer', fontFamily: FONT,
+                border: `1.5px solid ${topicDropdownOpen ? C.teal : C.border}`,
+                background: topicDropdownOpen ? C.tealSoft : C.cardAlt,
+                color: selectedTopic === 'All' ? C.textMuted : C.teal,
+                fontSize: '13px', fontWeight: selectedTopic === 'All' ? 500 : 700,
+                transition: 'all 0.15s', textAlign: 'left',
+              }}
             >
-              Clear
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {selectedTopic === 'All' ? 'All topics' : selectedTopic}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                {selectedTopic !== 'All' && (
+                  <span
+                    onClick={e => { e.stopPropagation(); setSelectedTopic('All'); setSelectedBarStatus(null); setTopicDropdownOpen(false); }}
+                    style={{ fontSize: '14px', color: C.textMuted, lineHeight: 1, cursor: 'pointer' }}
+                  >✕</span>
+                )}
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                  style={{ transform: topicDropdownOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s', color: C.textMuted }}>
+                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
             </button>
-          )}
+
+            {/* Dropdown panel */}
+            {topicDropdownOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50,
+                background: C.card, border: `1.5px solid ${C.teal}`, borderRadius: '12px',
+                boxShadow: C.shadowLg, overflow: 'hidden',
+              }}>
+                {/* Search input */}
+                <div style={{ padding: '10px 12px', borderBottom: `1px solid ${C.border}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: C.cardAlt, borderRadius: '8px', padding: '7px 12px' }}>
+                    <svg width="13" height="13" fill="none" stroke={C.textMuted} strokeWidth="2" viewBox="0 0 24 24">
+                      <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+                    </svg>
+                    <input
+                      autoFocus
+                      value={topicSearch}
+                      onChange={e => setTopicSearch(e.target.value)}
+                      placeholder="Search topics…"
+                      style={{
+                        border: 'none', background: 'transparent', outline: 'none',
+                        fontSize: '13px', fontFamily: FONT, color: C.text, width: '100%',
+                      }}
+                    />
+                    {topicSearch && (
+                      <span onClick={() => setTopicSearch('')} style={{ cursor: 'pointer', color: C.textMuted, fontSize: '13px' }}>✕</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Options list */}
+                <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                  {allTopics
+                    .filter(t => t.toLowerCase().includes(topicSearch.toLowerCase()))
+                    .map(topic => {
+                      const isActive = selectedTopic === topic;
+                      return (
+                        <div
+                          key={topic}
+                          onClick={() => { setSelectedTopic(topic); setSelectedBarStatus(null); setTopicDropdownOpen(false); setTopicSearch(''); }}
+                          style={{
+                            padding: '9px 14px', cursor: 'pointer', fontFamily: FONT,
+                            fontSize: '13px', fontWeight: isActive ? 700 : 400,
+                            color: isActive ? C.teal : C.text,
+                            background: isActive ? C.tealSoft : 'transparent',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = C.cardAlt; }}
+                          onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          {topic}
+                          {isActive && (
+                            <svg width="14" height="14" fill="none" stroke={C.teal} strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {allTopics.filter(t => t.toLowerCase().includes(topicSearch.toLowerCase())).length === 0 && (
+                    <div style={{ padding: '20px', textAlign: 'center', color: C.textMuted, fontSize: '13px' }}>No topics match</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -755,9 +882,14 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
               <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '14px' }}>
                 No students in this category{classFilter !== 'All' ? ` for class ${classFilter}` : ''}.
               </div>
-            ) : (
+            ) : (() => {
+              const PAGE_SIZE = 24;
+              const totalPages = Math.ceil(selectedBarStudents.length / PAGE_SIZE);
+              const paged = selectedBarStudents.slice(cardPage * PAGE_SIZE, (cardPage + 1) * PAGE_SIZE);
+              return (
+              <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-                {selectedBarStudents.map(({ student, status, minutesAvg, quizAvgScore, examAvg, totalExams: te }) => {
+                {paged.map(({ student, status, minutesAvg, quizAvgScore, examAvg, totalExams: te }) => {
                   const scfg = STATUS_CONFIG[status];
 
                   const quizBarColor = quizAvgScore == null ? '#F43F5E'
@@ -832,7 +964,58 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                   );
                 })}
               </div>
-            )}
+
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${C.border}` }}>
+                  <button
+                    onClick={() => { setCardPage(p => p - 1); studentCardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                    disabled={cardPage === 0}
+                    style={{
+                      padding: '7px 16px', borderRadius: '8px', border: `1px solid ${C.border}`,
+                      background: cardPage === 0 ? C.cardAlt : C.card,
+                      color: cardPage === 0 ? C.textMuted : C.text,
+                      fontSize: '13px', fontWeight: 600, cursor: cardPage === 0 ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, transition: 'all 0.15s',
+                    }}
+                  >← Prev</button>
+
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {Array.from({ length: totalPages }, (_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setCardPage(i); studentCardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                        style={{
+                          width: '32px', height: '32px', borderRadius: '8px', border: `1px solid ${i === cardPage ? C.teal : C.border}`,
+                          background: i === cardPage ? C.tealSoft : 'transparent',
+                          color: i === cardPage ? C.teal : C.textSecondary,
+                          fontSize: '13px', fontWeight: i === cardPage ? 700 : 500,
+                          cursor: 'pointer', fontFamily: FONT,
+                        }}
+                      >{i + 1}</button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => { setCardPage(p => p + 1); studentCardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                    disabled={cardPage === totalPages - 1}
+                    style={{
+                      padding: '7px 16px', borderRadius: '8px', border: `1px solid ${C.border}`,
+                      background: cardPage === totalPages - 1 ? C.cardAlt : C.card,
+                      color: cardPage === totalPages - 1 ? C.textMuted : C.text,
+                      fontSize: '13px', fontWeight: 600, cursor: cardPage === totalPages - 1 ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT, transition: 'all 0.15s',
+                    }}
+                  >Next →</button>
+
+                  <span style={{ fontSize: '12px', color: C.textMuted, marginLeft: '4px' }}>
+                    {cardPage * PAGE_SIZE + 1}–{Math.min((cardPage + 1) * PAGE_SIZE, selectedBarStudents.length)} of {selectedBarStudents.length}
+                  </span>
+                </div>
+              )}
+              </>
+              );
+            })()}
           </div>
         );
       })()}

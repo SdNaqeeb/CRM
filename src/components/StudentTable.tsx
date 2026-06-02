@@ -3,23 +3,22 @@ import { StudentEngagementSummary, EngagementStatus } from '../types';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 
-// Dark theme palette
 const COLORS = {
-  bg: '#0B1120',
-  cardBg: '#111827',
-  cardBorder: '#1E293B',
-  rowHover: '#1E293B',
-  headerBg: '#0F172A',
-  textPrimary: '#F1F5F9',
-  textSecondary: '#94A3B8',
+  bg: '#EDE9FE',
+  cardBg: '#FFFFFF',
+  cardBorder: '#E2E8F0',
+  rowHover: '#F5F3FF',
+  headerBg: '#F5F3FF',
+  textPrimary: '#0F172A',
+  textSecondary: '#475569',
   textMuted: '#64748B',
   green: '#10B981',
   blue: '#3B82F6',
-  purple: '#8B5CF6',
+  purple: '#7C3AED',
   amber: '#F59E0B',
   rose: '#F43F5E',
-  teal: '#14B8A6',
-  inputBorder: '#334155',
+  teal: '#7C3AED',
+  inputBorder: '#E2E8F0',
 };
 
 interface StudentTableProps {
@@ -359,7 +358,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                   key={student.student_id}
                   style={{
                     borderTop: `1px solid ${COLORS.cardBorder}`,
-                    background: isSelected ? 'rgba(20,184,166,0.08)' : COLORS.cardBg,
+                    background: isSelected ? 'rgba(124,58,237,0.08)' : COLORS.cardBg,
                     transition: 'background 0.15s',
                     cursor: 'default',
                     animation: `entrance-stagger 0.3s ease-out ${idx * 0.02}s both`,
@@ -396,7 +395,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                           width: '8px',
                           height: '8px',
                           borderRadius: '50%',
-                          background: student.is_currently_active ? COLORS.green : '#475569',
+                          background: student.is_currently_active ? COLORS.green : '#CBD5E1',
                           flexShrink: 0,
                           boxShadow: student.is_currently_active
                             ? `0 0 8px rgba(16,185,129,0.5)`
@@ -586,7 +585,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
             width="40"
             height="40"
             fill="none"
-            stroke={COLORS.inputBorder}
+            stroke={COLORS.cardBorder}
             strokeWidth="1.5"
             viewBox="0 0 24 24"
             style={{ margin: '0 auto 12px' }}

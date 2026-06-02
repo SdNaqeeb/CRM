@@ -6,16 +6,16 @@ const SERIF = '"Source Serif 4", Georgia, serif';
 const SANS  = '"Plus Jakarta Sans", system-ui, sans-serif';
 
 const C = {
-  border: '#1E293B', borderStrong: '#334155',
-  text: '#F1F5F9', textSecondary: '#64748B', textMuted: '#94A3B8',
-  teal: '#14B8A6', tealSoft: 'rgba(20,184,166,0.15)',
-  green: '#10B981', greenSoft: 'rgba(16,185,129,0.15)',
-  amber: '#F59E0B', amberSoft: 'rgba(245,158,11,0.15)',
-  purple: '#7C3AED', purpleSoft: 'rgba(124,58,237,0.15)',
-  card: '#111827', cardAlt: '#1a2332',
-  shadow: '0 4px 12px rgba(0,0,0,0.15)',
-  shadowLg: '0 8px 24px rgba(0,0,0,0.2)',
-  shadowGlow: '0 0 0 4px rgba(20,184,166,0.2)',
+  border: '#E2E8F0', borderStrong: '#CBD5E1',
+  text: '#0F172A', textSecondary: '#475569', textMuted: '#64748B',
+  teal: '#7C3AED', tealSoft: 'rgba(124,58,237,0.10)',
+  green: '#10B981', greenSoft: 'rgba(16,185,129,0.12)',
+  amber: '#F59E0B', amberSoft: 'rgba(245,158,11,0.12)',
+  purple: '#7C3AED', purpleSoft: 'rgba(124,58,237,0.12)',
+  card: '#FFFFFF', cardAlt: '#F5F3FF',
+  shadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.05)',
+  shadowLg: '0 4px 6px rgba(0,0,0,0.04), 0 10px 24px rgba(0,0,0,0.08)',
+  shadowGlow: '0 0 0 4px rgba(124,58,237,0.15)',
 };
 
 const STATUS_STYLE: Record<TimelineEntry['status'], { label: string; bg: string; fg: string; dot: string }> = {
