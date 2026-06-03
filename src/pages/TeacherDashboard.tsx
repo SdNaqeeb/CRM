@@ -12,8 +12,7 @@ import WeeklyExamResults from '../components/WeeklyExamResults';
 import JEEExamResults from '../components/JEEExamResults';
 import StudentTrackGrid, { TrackPreloadData } from '../components/StudentTrackGrid';
 import mockData from '../mock_data.json';
-import TimelineStrip from '../components/TimelineStrip';
-import { TimelineEntry } from '../components/TeacherTimeline';
+import ScheduledAssignmentsPanel from '../components/ScheduledAssignmentsPanel';
 import DashboardIcon from '../components/DashboardIcon';
 
 const FONT = '"Plus Jakarta Sans", system-ui, sans-serif';
@@ -33,62 +32,6 @@ const C = {
   shadowLg: '0 4px 6px rgba(0,0,0,0.04), 0 10px 24px rgba(0,0,0,0.08)',
 };
 
-function formatDateShort(d: string) {
-  const dt = new Date(d);
-  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function transformAssignmentsToTimeline(items: ScheduledAssignmentItem[]): TimelineEntry[] {
-  const byTopic = new Map<string, ScheduledAssignmentItem[]>();
-  for (const item of items) {
-    const key = item.topic_name ?? 'Unknown';
-    const list = byTopic.get(key) ?? [];
-    list.push(item);
-    byTopic.set(key, list);
-  }
-
-  const today = new Date().toISOString().split('T')[0];
-  let weekNum = 1;
-
-  return Array.from(byTopic.entries())
-    .sort(([, a], [, b]) => {
-      const da = a.find(x => x.scheduled_date)?.scheduled_date ?? '';
-      const db = b.find(x => x.scheduled_date)?.scheduled_date ?? '';
-      return da.localeCompare(db);
-    })
-    .map(([topic, assignments]) => {
-      const dates = assignments.map(a => a.scheduled_date).filter(Boolean) as string[];
-      const minDate = dates.length ? dates.reduce((a, b) => (a < b ? a : b)) : null;
-      const maxDate = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
-
-      const totalAssigned = assignments.reduce((s, a) => s + a.assigned_count, 0);
-      const totalSubmitted = assignments.reduce((s, a) => s + a.submitted_count, 0);
-      const ratio = totalAssigned > 0 ? totalSubmitted / totalAssigned : 0;
-
-      let status: TimelineEntry['status'];
-      if (maxDate && maxDate < today && ratio >= 0.7) status = 'completed';
-      else if (minDate && minDate <= today) status = 'in-progress';
-      else status = 'upcoming';
-
-      const subtopics = [...new Set(assignments.map(a => a.subtopic_code).filter(Boolean) as string[])];
-      const subject = assignments[0]?.subject_name ?? '';
-
-      const dateRange = minDate && maxDate && minDate !== maxDate
-        ? `${formatDateShort(minDate)} – ${formatDateShort(maxDate)}`
-        : minDate ? formatDateShort(minDate) : '—';
-
-      return {
-        week: `Week ${weekNum++}`,
-        date_range: dateRange,
-        subject,
-        topic,
-        subtopics,
-        learning_objectives: '',
-        resources: '',
-        status,
-      } as TimelineEntry;
-    });
-}
 
 const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -125,7 +68,6 @@ const TeacherDashboard: React.FC = () => {
 
   const [trackPreload, setTrackPreload] = useState<TrackPreloadData | undefined>(undefined);
   const [scheduledAssignments, setScheduledAssignments] = useState<ScheduledAssignmentItem[] | null>(null);
-  const [timelineEntries, setTimelineEntries] = useState<TimelineEntry[]>([]);
 
   const [dayFilter, setDayFilter] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -173,9 +115,7 @@ const TeacherDashboard: React.FC = () => {
     if (!teacherUsername) return;
     try {
       const data = await scheduledAssignmentAPI.getByUsername(teacherUsername, 500);
-      const items = data.items ?? [];
-      setScheduledAssignments(items);
-      setTimelineEntries(transformAssignmentsToTimeline(items));
+      setScheduledAssignments(data.items ?? []);
     } catch (err) {
       console.error('Failed to load scheduled assignments:', err);
       setScheduledAssignments([]);
@@ -599,10 +539,10 @@ const TeacherDashboard: React.FC = () => {
       {/* ── Main Content ──────────────────────────────────────────────────────── */}
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '24px 28px' }}>
 
-        {/* Timeline Strip */}
-        <TimelineStrip
-          entries={timelineEntries}
-          loadingEntries={scheduledAssignments === null}
+        {/* Scheduled Assignments Panel */}
+        <ScheduledAssignmentsPanel
+          assignments={scheduledAssignments ?? []}
+          loading={scheduledAssignments === null}
           activeTopic={trackTopic}
           onTopicClick={(topic: string) => {
             setTrackTopic(topic);
