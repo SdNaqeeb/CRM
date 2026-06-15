@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DashboardProvider } from './context/DashboardContext';
@@ -7,7 +7,7 @@ import LoginPage from './pages/LoginPage';
 import TeacherDashboard from './pages/TeacherDashboard';
 import SchoolDashboard from './pages/SchoolDashboard';
 import OrcaLexDashboard from './pages/OrcaLexDashboard';
-import ChatBot from './components/ChatBot';
+// import ChatBot from './components/ChatBot';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{
@@ -34,6 +34,40 @@ const ProtectedRoute: React.FC<{
 };
 
 // Layout with header
+const ScrollToTop: React.FC = () => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 300);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      title="Back to top"
+      style={{
+        position: 'fixed', bottom: 28, right: 28, zIndex: 999,
+        width: 44, height: 44, borderRadius: 12,
+        background: '#7C3AED', border: 'none',
+        color: '#fff', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 4px 16px rgba(124,58,237,0.35)',
+        transition: 'opacity 0.2s, transform 0.2s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+        <path d="M18 15l-6-6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+};
+
 const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { user, logout } = useAuth();
 
@@ -184,7 +218,9 @@ const DashboardLayout: React.FC<{ children: React.ReactElement }> = ({ children 
       {children}
 
       {/* Chat Assistant */}
-      <ChatBot />
+      {/* <ChatBot /> */}
+
+      <ScrollToTop />
     </div>
   );
 };

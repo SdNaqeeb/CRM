@@ -908,7 +908,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({ studentId, onCl
                       fontFamily: FONT_SERIF,
                     }}
                   >
-                    Pre Assessment Analysis
+                    Spotcheck Analysis
                   </h4>
                 </div>
 
@@ -1166,7 +1166,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({ studentId, onCl
                           fontSize: '13px',
                         }}
                       >
-                        No pre-assessment records match the current filters.
+                        No spotcheck records match the current filters.
                       </div>
                     )}
                   </div>
@@ -1182,7 +1182,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({ studentId, onCl
                       fontSize: '13px',
                     }}
                   >
-                    No pre-assessment records found for this student.
+                    No spotcheck records found for this student.
                   </div>
                 )}
               </div>

@@ -41,13 +41,20 @@ function getStatus(item: ScheduledAssignmentItem): AssignStatus {
 }
 
 function toDateKey(d: string | null): string | null {
+  const dt = parseDate(d);
+  return dt ? dt.toISOString().split('T')[0] : null;
+}
+
+function parseDate(d: string | null): Date | null {
   if (!d) return null;
-  return d.split('T')[0];
+  const dt = new Date(d.includes('T') ? d : d + 'T00:00:00');
+  return isNaN(dt.getTime()) ? null : dt;
 }
 
 function fmtDateShort(d: string | null) {
-  if (!d) return '—';
-  return new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const dt = parseDate(d);
+  if (!dt) return '—';
+  return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
 interface Props {
@@ -170,9 +177,9 @@ const ScheduledAssignmentsPanel: React.FC<Props> = ({ assignments, loading, acti
         {!loading && filtered.length > 0 && (
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              { label: 'Assigned',  v: totals.assigned,  color: C.teal,  bg: C.tealSoft },
-              { label: 'Viewed',    v: totals.viewed,    color: C.blue,  bg: C.blueSoft },
-              { label: 'Submitted', v: totals.submitted, color: C.green, bg: C.greenSoft },
+              { label: 'Assigned to',  v: totals.assigned,  color: C.teal,  bg: C.tealSoft },
+              { label: 'Viewed by',    v: totals.viewed,    color: C.blue,  bg: C.blueSoft },
+              { label: 'Submitted by', v: totals.submitted, color: C.green, bg: C.greenSoft },
             ].map(({ label, v, color, bg }) => (
               <div key={label} style={{ padding: '4px 12px', borderRadius: 999, background: bg, display: 'flex', gap: 5, alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color, fontFamily: SERIF }}>{v}</span>
@@ -249,7 +256,7 @@ const ScheduledAssignmentsPanel: React.FC<Props> = ({ assignments, loading, acti
             </div>
 
             {/* Calendar grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderTop: `1px solid ${C.border}`, borderLeft: `1px solid ${C.border}` }}>
               {calendarCells.map(cell => {
                 const cellItems = byDate.get(cell.dateKey) ?? [];
                 const isToday   = cell.dateKey === todayKey;
@@ -348,7 +355,7 @@ const ScheduledAssignmentsPanel: React.FC<Props> = ({ assignments, loading, acti
                 <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: SANS }}>
                   {isViewAll
                     ? 'All Assignments'
-                    : `${new Date(selectedDay + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`
+                    : `${new Date(selectedDay! + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`
                   }
                 </span>
                 <span style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, background: C.cardAlt, padding: '2px 9px', borderRadius: 999 }}>
@@ -452,7 +459,7 @@ const AssignmentCard: React.FC<CardProps> = ({ item: a, activeTopic, onTopicClic
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: C.textSecondary }}>
         <DashboardIcon name="calendar" size={11} color={C.textMuted} />
         <span>{fmtDateShort(a.scheduled_date)}</span>
-        {a.due_date && (
+        {parseDate(a.due_date) && (
           <>
             <span style={{ color: C.border }}>→</span>
             <span>{fmtDateShort(a.due_date)}</span>
@@ -467,9 +474,9 @@ const AssignmentCard: React.FC<CardProps> = ({ item: a, activeTopic, onTopicClic
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
           {[
-            { label: 'Assigned',  v: a.assigned_count,  color: C.textSecondary },
-            { label: 'Viewed',    v: a.viewed_count,    color: C.blue },
-            { label: 'Submitted', v: a.submitted_count, color: barColor },
+            { label: 'Assigned to',  v: a.assigned_count,  color: C.textSecondary },
+            { label: 'Viewed by',    v: a.viewed_count,    color: C.blue },
+            { label: 'Submitted by', v: a.submitted_count, color: barColor },
           ].map(({ label, v, color }) => (
             <div key={label} style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color, fontFamily: SERIF }}>{v}</div>
@@ -481,7 +488,7 @@ const AssignmentCard: React.FC<CardProps> = ({ item: a, activeTopic, onTopicClic
           <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${viewedPct}%`, borderRadius: 999, background: C.blueSoft }} />
           <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${submittedPct}%`, borderRadius: 999, background: barColor }} />
         </div>
-        <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3, textAlign: 'right' }}>{submittedPct}% submitted</div>
+        <div style={{ fontSize: 10, color: C.textMuted, marginTop: 3, textAlign: 'right' }}>{submittedPct}% submitted by</div>
       </div>
 
       {/* Track button */}

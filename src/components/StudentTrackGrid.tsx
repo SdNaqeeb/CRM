@@ -6,6 +6,33 @@ import { ScheduledAssignmentItem } from '../services/api';
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const API_BASE = process.env.REACT_APP_API_URL || 'https://crm.smartlearners.ai/backend-api/';
 
+interface MockAttempt {
+  score: number;
+  correct: number;
+  total: number;
+  date: string;
+  examTitle: string;
+  chapters: string[];
+}
+
+function formatChapter(raw: string): string {
+  return raw
+    .replace(/^CHAPTER[_\s]*\d*[_\s]*/i, '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+}
+
+function normalizeChapterName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/^chapter[_\s]*\d*[_\s]*/i, '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const C = {
   bg: '#EDE9FE', card: '#FFFFFF', cardAlt: '#F5F3FF',
   border: '#E2E8F0', borderStrong: '#CBD5E1',
@@ -16,15 +43,8 @@ const C = {
   shadowLg: '0 4px 6px rgba(0,0,0,0.04), 0 10px 24px rgba(0,0,0,0.08)',
 };
 
-interface SessionItem {
-  username: string;
-  login_time: string | null;
-  logout_time: string | null;
-  session_duration_seconds: number | null;
-}
-
 export interface TrackPreloadData {
-  sessions: SessionItem[];
+  sessions: any[];
   homeworks: { id: number }[];
   exams: { exam_id: number }[];
   resolvedSchoolCode: string;
@@ -43,31 +63,20 @@ interface StudentTrackGridProps {
 type TrackStatus = 'completely-off' | 'slightly-off' | 'on-track';
 
 interface Thresholds {
-  loginSlightlyOff: number;
-  loginCompletelyOff: number;
-  quizSlightlyOff: number;
-  quizCompletelyOff: number;
-  examSlightlyOff: number;
-  examCompletelyOff: number;
+  slightlyOff: number;
+  completelyOff: number;
 }
 
 const DEFAULT_THRESHOLDS: Thresholds = {
-  loginSlightlyOff: 3,
-  loginCompletelyOff: 5,
-  quizSlightlyOff: 60,
-  quizCompletelyOff: 40,
-  examSlightlyOff: 60,
-  examCompletelyOff: 40,
+  slightlyOff: 60,
+  completelyOff: 40,
 };
 
 interface StudentStatus {
   student: StudentEngagementSummary;
   status: TrackStatus;
-  minutesAvg: number;
-  daysActive: number;
   quizAvgScore: number | null;
-  examAvg: number | null;
-  totalExams: number;
+  mockAvgScore: number | null;
 }
 
 const STATUS_CONFIG: Record<TrackStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -78,51 +87,24 @@ const STATUS_CONFIG: Record<TrackStatus, { label: string; color: string; bg: str
 
 const BAR_ORDER: TrackStatus[] = ['completely-off', 'slightly-off', 'on-track'];
 
-function computeStatus(
-  daysOff: number | undefined | null,
-  quizAvgScore: number | null,
-  hasQuizData: boolean,
-  examAvg: number | null,
-  totalExams: number,
-  t: Thresholds,
-): TrackStatus {
-  const days = daysOff ?? 99;
-
-  const loginStatus: 'on-track' | 'slightly-off' | 'completely-off' =
-    days >= t.loginCompletelyOff ? 'completely-off' :
-    days >= t.loginSlightlyOff   ? 'slightly-off' : 'on-track';
-
-  let quizStatus: TrackStatus = 'on-track';
-  if (hasQuizData) {
-    if (quizAvgScore === null)                     quizStatus = 'completely-off';
-    else if (quizAvgScore < t.quizCompletelyOff)   quizStatus = 'completely-off';
-    else if (quizAvgScore < t.quizSlightlyOff)     quizStatus = 'slightly-off';
-    else                                            quizStatus = 'on-track';
-  }
-
-  let examStatus: TrackStatus = 'on-track';
-  if (totalExams >= 1) {
-    if (examAvg === null)                          examStatus = 'completely-off';
-    else if (examAvg < t.examCompletelyOff)        examStatus = 'completely-off';
-    else if (examAvg < t.examSlightlyOff)          examStatus = 'slightly-off';
-    else                                            examStatus = 'on-track';
-  }
-
-  if (loginStatus === 'completely-off' || quizStatus === 'completely-off' || examStatus === 'completely-off') return 'completely-off';
-  if (loginStatus === 'slightly-off'   || quizStatus === 'slightly-off'   || examStatus === 'slightly-off')   return 'slightly-off';
+function computeStatus(combinedScore: number | null, t: Thresholds): TrackStatus {
+  if (combinedScore === null)              return 'completely-off';
+  if (combinedScore < t.completelyOff)    return 'completely-off';
+  if (combinedScore < t.slightlyOff)      return 'slightly-off';
   return 'on-track';
 }
 
 const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCode, teacherUsername, externalTopic, onExternalTopicChange, scheduledAssignments, preload }) => {
-  const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [quizScoreMap, setQuizScoreMap] = useState<Map<number, { total: number; count: number }>>(new Map());
   const [quizTopicMap, setQuizTopicMap] = useState<Map<number, Map<string, { correct: number; total: number }>>>(new Map());
   const [hasQuizData, setHasQuizData] = useState(false);
   const [prepTopicMap, setPrepTopicMap] = useState<Map<number, Map<string, { correct: number; total: number }>>>(new Map());
   const [topicAttemptMap, setTopicAttemptMap] = useState<Map<number, Map<string, Array<{ correct: number; incorrect: number; date: string }>>>>(new Map());
+  const [mockTopicMap, setMockTopicMap] = useState<Map<number, Map<string, MockAttempt[]>>>(new Map());
   const [selectedStudentStatus, setSelectedStudentStatus] = useState<StudentStatus | null>(null);
   const [topicModalStudent, setTopicModalStudent] = useState<StudentStatus | null>(null);
   const [classFilter, setClassFilter] = useState<string>('All');
+  const [sectionFilter, setSectionFilter] = useState<string>('All');
   const [selectedTopic, setSelectedTopicInternal] = useState<string>('All');
 
   const setSelectedTopic = (t: string) => {
@@ -137,25 +119,12 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTopic]);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (topicDropdownRef.current && !topicDropdownRef.current.contains(e.target as Node)) {
-        setTopicDropdownOpen(false);
-        setTopicSearch('');
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
   const [assignmentScoreMap, setAssignmentScoreMap] = useState<Map<number, number>>(new Map());
-  const [examScoreMap, setExamScoreMap] = useState<Map<number, { total: number; count: number }>>(new Map());
-  const [totalExams, setTotalExams] = useState(0);
   const [loading, setLoading] = useState(true);
   const [thresholds, setThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [draftThresholds, setDraftThresholds] = useState<Thresholds>(DEFAULT_THRESHOLDS);
   const [selectedBarStatus, setSelectedBarStatus] = useState<TrackStatus | null>(null);
   const [cardPage, setCardPage] = useState(0);
-  const [topicDropdownOpen, setTopicDropdownOpen] = useState(false);
   const [topicSearch, setTopicSearch] = useState('');
   const topicDropdownRef = useRef<HTMLDivElement>(null);
   const studentCardsRef = React.useRef<HTMLDivElement>(null);
@@ -163,50 +132,37 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        // Wave 1: use preloaded data if available (fetched during greeting screen),
-        // otherwise fetch now.
-        let wave1Sessions: SessionItem[];
+        // Wave 1: quiz homeworks + mock exams list
         let homeworks: { id: number }[];
-        let exams: { exam_id: number }[];
         let resolvedSchoolCode: string;
 
         if (preload) {
-          wave1Sessions    = preload.sessions;
-          homeworks        = preload.homeworks;
-          exams            = preload.exams;
+          homeworks          = preload.homeworks;
           resolvedSchoolCode = preload.resolvedSchoolCode;
         } else {
-          const [sessionRes, homeworkRes, examRes] = await Promise.all([
-            fetch(`${API_BASE}api/external-data/user-sessions/by-school-code`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ school_code: schoolCode, limit: 5000 }),
-            }),
-            fetch(`${API_BASE}api/external-data/quiz-homework/by-username`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: teacherUsername, limit: 7 }),
-            }),
-            fetch(`${API_BASE}api/external-data/teacher-exams/by-username`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: teacherUsername, limit: 5 }),
-            }),
-          ]);
-          const sessionData  = await sessionRes.json();
+          const homeworkRes = await fetch(`${API_BASE}api/external-data/quiz-homework/by-username`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: teacherUsername, limit: 500 }),
+          });
           const homeworkData = await homeworkRes.json();
-          const examData     = await examRes.json();
-          wave1Sessions      = sessionData.items ?? [];
           homeworks          = homeworkData.items ?? [];
-          exams              = examData.items ?? [];
           resolvedSchoolCode = homeworkData.school_code || schoolCode || '';
         }
 
-        setSessions(wave1Sessions);
         setHasQuizData(homeworks.length > 0);
-        setTotalExams(exams.length);
 
-        const [submissionResults, attemptResults] = await Promise.all([
+        // Unique class/section combos from students (for mock exam fetch)
+        const classSectionCombos = Array.from(
+          new Map(
+            students
+              .filter(s => s.grade)
+              .map(s => [`${s.grade}|||${s.section ?? ''}`, { class_code: s.grade!, section_name: s.section ?? undefined }] as [string, { class_code: string; section_name?: string }])
+          ).values()
+        );
+
+        // Wave 2 (parallel): quiz submissions + mock exam lists per class/section
+        const [submissionResults, mockExamListResults] = await Promise.all([
           homeworks.length > 0
             ? Promise.all(
                 homeworks.map(hw =>
@@ -214,29 +170,33 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ homework_id: hw.id, limit: 1000 }),
-                  })
-                    .then(r => r.json())
-                    .catch(() => ({ items: [] }))
+                  }).then(r => r.json()).catch(() => ({ items: [] }))
                 )
               )
             : Promise.resolve([]),
-          exams.length > 0
+          resolvedSchoolCode && classSectionCombos.length > 0
             ? Promise.all(
-                exams.map(exam =>
-                  fetch(`${API_BASE}api/external-data/teacher-exams/attempts/by-exam-id`, {
+                classSectionCombos.map(({ class_code, section_name }) =>
+                  fetch(`${API_BASE}api/external-data/mock-exams/by-class-section`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ exam_id: exam.exam_id, limit: 1000 }),
-                  })
-                    .then(r => r.json())
-                    .catch(() => ({ items: [] }))
+                    body: JSON.stringify({
+                      school_code: resolvedSchoolCode,
+                      class_code,
+                      ...(section_name ? { section_name } : {}),
+                      limit: 100,
+                    }),
+                  }).then(r => r.json()).catch(() => ({ items: [] }))
                 )
               )
             : Promise.resolve([]),
         ]);
 
+        // Build quiz score + topic maps
         const qMap = new Map<number, { total: number; count: number }>();
         const tMap = new Map<number, Map<string, { correct: number; total: number }>>();
+        const aMap = new Map<number, Map<string, Array<{ correct: number; incorrect: number; date: string }>>>();
+
         for (const result of submissionResults) {
           for (const sub of (result.items ?? [])) {
             if (sub.student_id == null) continue;
@@ -246,34 +206,15 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
               qMap.set(sub.student_id, { total: existing.total + score, count: existing.count + 1 });
             }
             const breakdown: any[] = sub.graph_data?.chapter_breakdown ?? [];
-            if (breakdown.length > 0) {
-              const studentTopics = tMap.get(sub.student_id) ?? new Map<string, { correct: number; total: number }>();
-              for (const ch of breakdown) {
-                const name = String(ch.chapter || '').trim();
-                const chTotal = Number(ch.total ?? 0);
-                const chCorrect = Number(ch.correct ?? 0);
-                if (!name || chTotal === 0) continue;
-                const prev = studentTopics.get(name) ?? { correct: 0, total: 0 };
-                studentTopics.set(name, { correct: prev.correct + chCorrect, total: prev.total + chTotal });
-              }
-              tMap.set(sub.student_id, studentTopics);
-            }
-          }
-        }
-        setQuizScoreMap(qMap);
-        setQuizTopicMap(tMap);
-
-        // Build per-attempt topic data (quiz)
-        const aMap = new Map<number, Map<string, Array<{ correct: number; incorrect: number; date: string }>>>();
-        for (const result of submissionResults) {
-          for (const sub of (result.items ?? [])) {
-            if (sub.student_id == null) continue;
-            const breakdown: any[] = sub.graph_data?.chapter_breakdown ?? [];
             for (const ch of breakdown) {
               const name = String(ch.chapter || '').trim();
               const chTotal = Number(ch.total ?? 0);
               const chCorrect = Number(ch.correct ?? 0);
               if (!name || chTotal === 0) continue;
+              const studentTopics = tMap.get(sub.student_id) ?? new Map<string, { correct: number; total: number }>();
+              const prev = studentTopics.get(name) ?? { correct: 0, total: 0 };
+              studentTopics.set(name, { correct: prev.correct + chCorrect, total: prev.total + chTotal });
+              tMap.set(sub.student_id, studentTopics);
               const studentAttempts = aMap.get(sub.student_id) ?? new Map();
               const attempts = studentAttempts.get(name) ?? [];
               attempts.push({ correct: chCorrect, incorrect: chTotal - chCorrect, date: sub.created_at ?? '' });
@@ -282,26 +223,68 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
             }
           }
         }
+        setQuizScoreMap(qMap);
+        setQuizTopicMap(tMap);
 
-        const eMap = new Map<number, { total: number; count: number }>();
-        for (const result of attemptResults) {
-          for (const attempt of (result.items ?? [])) {
-            if (attempt.student_id != null && attempt.percentage != null) {
-              const existing = eMap.get(attempt.student_id) ?? { total: 0, count: 0 };
-              eMap.set(attempt.student_id, { total: existing.total + attempt.percentage, count: existing.count + 1 });
+        // Deduplicate mock exams by homework_id
+        const mockExamMap = new Map<number, { homework_id: number; title: string; chapters: string[] }>();
+        for (const data of mockExamListResults) {
+          for (const item of (data.items ?? [])) {
+            if (!mockExamMap.has(item.homework_id)) {
+              mockExamMap.set(item.homework_id, {
+                homework_id: item.homework_id,
+                title: item.title ?? '',
+                chapters: item.chapters ?? [],
+              });
             }
           }
         }
-        setExamScoreMap(eMap);
 
-        const prepRes = resolvedSchoolCode
-          ? await fetch(`${API_BASE}api/external-data/test-prep/by-school-code`, {
+        // Wave 3 (parallel): test-prep + mock exam results
+        const mockExamList = Array.from(mockExamMap.values());
+        const [prepData, ...mockResultsData] = await Promise.all([
+          resolvedSchoolCode
+            ? fetch(`${API_BASE}api/external-data/test-prep/by-school-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ school_code: resolvedSchoolCode, limit: 2000 }),
+              }).then(r => r.json()).catch(() => ({ items: [] }))
+            : Promise.resolve({ items: [] }),
+          ...mockExamList.map(exam =>
+            fetch(`${API_BASE}api/external-data/mock-exams/results/by-homework-id`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ school_code: resolvedSchoolCode, limit: 2000 }),
-            })
-          : null;
-        const prepData = prepRes ? await prepRes.json() : { items: [] };
+              body: JSON.stringify({ homework_id: exam.homework_id, limit: 500 }),
+            }).then(r => r.json()).catch(() => ({ items: [] }))
+          ),
+        ]);
+
+        // Build mock topic map (normalized chapter → MockAttempt[] per student)
+        const mMap = new Map<number, Map<string, MockAttempt[]>>();
+        mockExamList.forEach((exam, idx) => {
+          const resultData = mockResultsData[idx];
+          const normalizedChapters = (exam.chapters ?? []).map(normalizeChapterName).filter(Boolean);
+          for (const result of (resultData.items ?? [])) {
+            if (result.student_id == null) continue;
+            const attempt: MockAttempt = {
+              score: result.score,
+              correct: result.correct,
+              total: result.total,
+              date: result.submitted_at ?? '',
+              examTitle: exam.title,
+              chapters: exam.chapters ?? [],
+            };
+            const studentMock = mMap.get(result.student_id) ?? new Map<string, MockAttempt[]>();
+            for (const normChapter of normalizedChapters) {
+              const prev = studentMock.get(normChapter) ?? [];
+              studentMock.set(normChapter, [...prev, attempt]);
+            }
+            mMap.set(result.student_id, studentMock);
+          }
+        });
+        setMockTopicMap(mMap);
+
+        // Test prep (pre-assessment) topic breakdown
         const pMap = new Map<number, Map<string, { correct: number; total: number }>>();
         const teacherStudentIds = new Set(students.map(s => s.student_id));
         for (const item of (prepData.items ?? [])) {
@@ -316,7 +299,6 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
             if (!name || chTotal === 0) continue;
             const prev = studentTopics.get(name) ?? { correct: 0, total: 0 };
             studentTopics.set(name, { correct: prev.correct + chCorrect, total: prev.total + chTotal });
-            // per-attempt for prep
             const sid = item.student_id;
             const studentAttempts = aMap.get(sid) ?? new Map();
             const attempts = studentAttempts.get(name) ?? [];
@@ -330,7 +312,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         setTopicAttemptMap(aMap);
 
       } catch {
-        setSessions([]);
+        // silent — component shows empty state
       } finally {
         setLoading(false);
       }
@@ -371,27 +353,6 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     });
   }, [selectedTopic, scheduledAssignments]);
 
-  const sessionsByUsername = useMemo(() => {
-    const map = new Map<string, { minutesPerDay: Map<string, number> }>();
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    for (const s of sessions) {
-      if (!s.username || !s.login_time) continue;
-      const day = s.login_time.split('T')[0];
-      if (new Date(day).getTime() < cutoff) continue;
-      let durationSec = s.session_duration_seconds;
-      if (durationSec == null && s.logout_time) {
-        const diff = new Date(s.logout_time).getTime() - new Date(s.login_time).getTime();
-        if (diff > 0) durationSec = diff / 1000;
-      }
-      if (durationSec == null) continue;
-      const entry = map.get(s.username) ?? { minutesPerDay: new Map() };
-      const mins = durationSec / 60;
-      entry.minutesPerDay.set(day, (entry.minutesPerDay.get(day) ?? 0) + mins);
-      map.set(s.username, entry);
-    }
-    return map;
-  }, [sessions]);
-
   const allTopics = useMemo(() => {
     const topics = new Set<string>();
     quizTopicMap.forEach(tMap => tMap.forEach((_, t) => topics.add(t)));
@@ -403,15 +364,9 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   const studentStatuses: StudentStatus[] = useMemo(() => {
     return students.map(student => {
       const sid = student.student_id;
-      const data = sessionsByUsername.get(student.username ?? '');
-      const daysActive = data?.minutesPerDay.size ?? 0;
-      const minutesAvg = data && daysActive > 0
-        ? Math.round(Array.from(data.minutesPerDay.values()).reduce((a, b) => a + b, 0) / daysActive)
-        : 0;
 
+      // Quiz score (30% weight)
       let quizAvgScore: number | null;
-      let effectiveHasQuizData: boolean;
-
       if (selectedTopic !== 'All') {
         const assignmentScore = assignmentScoreMap.get(sid);
         if (assignmentScore !== undefined) {
@@ -420,39 +375,38 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
           const qEntry = quizTopicMap.get(sid)?.get(selectedTopic);
           const pEntry = prepTopicMap.get(sid)?.get(selectedTopic);
           const correct = (qEntry?.correct ?? 0) + (pEntry?.correct ?? 0);
-          const total = (qEntry?.total ?? 0) + (pEntry?.total ?? 0);
+          const total   = (qEntry?.total   ?? 0) + (pEntry?.total   ?? 0);
           quizAvgScore = total > 0 ? Math.round((correct / total) * 100) : null;
         }
-        effectiveHasQuizData = assignmentScoreMap.size > 0 || quizTopicMap.size > 0 || prepTopicMap.size > 0;
       } else {
         const quizEntry = quizScoreMap.get(sid);
         if (quizEntry && quizEntry.count > 0) {
           quizAvgScore = Math.round(quizEntry.total / quizEntry.count);
         } else {
-          // score_pct missing — compute from chapter breakdown data across all topics
           let correct = 0, total = 0;
           quizTopicMap.get(sid)?.forEach(v => { correct += v.correct; total += v.total; });
           prepTopicMap.get(sid)?.forEach(v => { correct += v.correct; total += v.total; });
           quizAvgScore = total > 0 ? Math.round((correct / total) * 100) : null;
         }
-        effectiveHasQuizData = hasQuizData || quizTopicMap.has(sid) || prepTopicMap.has(sid);
       }
 
-      const examEntry = examScoreMap.get(sid);
-      const examAvg = examEntry && examEntry.count > 0 ? Math.round(examEntry.total / examEntry.count) : null;
-      const effectiveExamAvg = selectedTopic !== 'All' ? null : examAvg;
-      const effectiveTotalExams = selectedTopic !== 'All' ? 0 : totalExams;
+      let mockAvgScore: number | null = null;
+      if (selectedTopic !== 'All') {
+        const normTopic = normalizeChapterName(selectedTopic);
+        const mockAttempts = mockTopicMap.get(sid)?.get(normTopic) ?? [];
+        if (mockAttempts.length > 0) {
+          mockAvgScore = Math.round(mockAttempts.reduce((sum, a) => sum + a.score, 0) / mockAttempts.length);
+        }
+      }
+
       return {
         student,
-        status: computeStatus(selectedTopic !== 'All' ? 0 : student.days_since_login, quizAvgScore, effectiveHasQuizData, effectiveExamAvg, effectiveTotalExams, thresholds),
-        minutesAvg,
-        daysActive,
+        status: computeStatus(quizAvgScore ?? mockAvgScore, thresholds),
         quizAvgScore,
-        examAvg,
-        totalExams,
+        mockAvgScore,
       };
     });
-  }, [students, sessionsByUsername, quizScoreMap, hasQuizData, examScoreMap, totalExams, thresholds, selectedTopic, quizTopicMap, prepTopicMap, assignmentScoreMap]);
+  }, [students, quizScoreMap, thresholds, selectedTopic, quizTopicMap, prepTopicMap, assignmentScoreMap, mockTopicMap]);
 
   const classOptions = useMemo(() => {
     const grades = new Set<string>();
@@ -460,20 +414,34 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     return ['All', ...Array.from(grades).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
   }, [students]);
 
-  // Per-class counts for the bar chart
+  const sectionOptions = useMemo(() => {
+    const sections = new Set<string>();
+    students.forEach(s => {
+      if (classFilter !== 'All' && s.grade !== classFilter) return;
+      if (s.section) sections.add(s.section);
+    });
+    return ['All', ...Array.from(sections).sort()];
+  }, [students, classFilter]);
+
+  // Per-class/section counts for the bar chart
   const barCounts = useMemo(() => {
-    const base = classFilter === 'All' ? studentStatuses : studentStatuses.filter(s => s.student.grade === classFilter);
+    const base = studentStatuses.filter(s => {
+      if (classFilter !== 'All' && s.student.grade !== classFilter) return false;
+      if (sectionFilter !== 'All' && s.student.section !== sectionFilter) return false;
+      return true;
+    });
     return {
       'completely-off': base.filter(s => s.status === 'completely-off').length,
       'slightly-off':   base.filter(s => s.status === 'slightly-off').length,
       'on-track':       base.filter(s => s.status === 'on-track').length,
     };
-  }, [studentStatuses, classFilter]);
+  }, [studentStatuses, classFilter, sectionFilter]);
 
-  // ── Graph 3: Class-wise track status breakdown ─────────────────────────────
+  // ── Class-wise track status breakdown ─────────────────────────────────────
   const classwiseBreakdown = useMemo(() => {
     const byClass = new Map<string, { 'On Track': number; 'Slightly Off': number; 'Completely Off': number }>();
     studentStatuses.forEach(({ student, status }) => {
+      if (sectionFilter !== 'All' && student.section !== sectionFilter) return;
       const grade = student.grade ?? 'N/A';
       const prev = byClass.get(grade) ?? { 'On Track': 0, 'Slightly Off': 0, 'Completely Off': 0 };
       if (status === 'on-track') prev['On Track']++;
@@ -484,7 +452,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     return Array.from(byClass.entries())
       .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
       .map(([label, counts]) => ({ label, ...counts }));
-  }, [studentStatuses]);
+  }, [studentStatuses, sectionFilter]);
 
   // Students shown when a bar is clicked
   const selectedBarStudents = useMemo(() => {
@@ -492,9 +460,10 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
     return studentStatuses.filter(s => {
       if (s.status !== selectedBarStatus) return false;
       if (classFilter !== 'All' && s.student.grade !== classFilter) return false;
+      if (sectionFilter !== 'All' && s.student.section !== sectionFilter) return false;
       return true;
     });
-  }, [studentStatuses, selectedBarStatus, classFilter]);
+  }, [studentStatuses, selectedBarStatus, classFilter, sectionFilter]);
 
   if (loading) {
     const sk: React.CSSProperties = {
@@ -550,27 +519,112 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
   return (
     <div style={{ fontFamily: FONT }}>
 
-      {/* ── Top row: class filters ── */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: '2px' }}>
-          Class
-        </span>
-        {classOptions.map(cls => (
-          <button
-            key={cls}
-            onClick={() => { setClassFilter(cls); setSelectedBarStatus(null); }}
-            style={{
-              padding: '5px 14px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
-              border: classFilter === cls ? `1.5px solid ${C.blue}` : `1.5px solid ${C.border}`,
-              background: classFilter === cls ? C.blueSoft : 'transparent',
-              color: classFilter === cls ? C.blue : C.textSecondary,
-              fontSize: '12px', fontWeight: classFilter === cls ? 700 : 500,
-              transition: 'all 0.15s',
-            }}
-          >
-            {cls}
-          </button>
-        ))}
+      {/* ── Filter bar: Class + Section + Topic ── */}
+      <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '14px 18px', marginBottom: '16px', boxShadow: C.shadow, display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-end' }}>
+
+        {/* Class pills */}
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Class</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {classOptions.map(cls => (
+              <button
+                key={cls}
+                onClick={() => { setClassFilter(cls); setSectionFilter('All'); setSelectedBarStatus(null); }}
+                style={{
+                  padding: '5px 13px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
+                  border: classFilter === cls ? `1.5px solid ${C.blue}` : `1.5px solid ${C.border}`,
+                  background: classFilter === cls ? C.blueSoft : 'transparent',
+                  color: classFilter === cls ? C.blue : C.textSecondary,
+                  fontSize: '12px', fontWeight: classFilter === cls ? 700 : 500,
+                  transition: 'all 0.15s',
+                }}
+              >{cls}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Section pills */}
+        {sectionOptions.length > 1 && (
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Section</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {sectionOptions.map(sec => (
+                <button
+                  key={sec}
+                  onClick={() => { setSectionFilter(sec); setSelectedBarStatus(null); }}
+                  style={{
+                    padding: '5px 13px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
+                    border: sectionFilter === sec ? `1.5px solid ${C.teal}` : `1.5px solid ${C.border}`,
+                    background: sectionFilter === sec ? C.tealSoft : 'transparent',
+                    color: sectionFilter === sec ? C.teal : C.textSecondary,
+                    fontSize: '12px', fontWeight: sectionFilter === sec ? 700 : 500,
+                    transition: 'all 0.15s',
+                  }}
+                >{sec}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Topic dropdown */}
+        {allTopics.length > 1 && (
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Topic</div>
+            <div ref={topicDropdownRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => { const dd = topicDropdownRef.current?.querySelector<HTMLDivElement>('.topic-dd'); if (dd) { dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; if (dd.style.display === 'block') dd.querySelector('input')?.focus(); } }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
+                  border: `1.5px solid ${selectedTopic !== 'All' ? C.teal : C.border}`,
+                  background: selectedTopic !== 'All' ? C.tealSoft : C.cardAlt,
+                  color: selectedTopic === 'All' ? C.textMuted : C.teal,
+                  fontSize: '13px', fontWeight: selectedTopic === 'All' ? 400 : 700,
+                  transition: 'all 0.15s', textAlign: 'left',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedTopic === 'All' ? 'All topics' : selectedTopic}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  {selectedTopic !== 'All' && (
+                    <span onClick={e => { e.stopPropagation(); setSelectedTopic('All'); setSelectedBarStatus(null); }} style={{ fontSize: '13px', color: C.textMuted, cursor: 'pointer' }}>✕</span>
+                  )}
+                  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: C.textMuted }}>
+                    <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              </button>
+              <div className="topic-dd" style={{ display: 'none', position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50, background: C.card, border: `1.5px solid ${C.teal}`, borderRadius: '10px', boxShadow: C.shadowLg, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 10px', borderBottom: `1px solid ${C.border}` }}>
+                  <input
+                    value={topicSearch}
+                    onChange={e => setTopicSearch(e.target.value)}
+                    placeholder="Search topics…"
+                    style={{ width: '100%', border: 'none', outline: 'none', fontSize: '13px', fontFamily: FONT, color: C.text, background: 'transparent' }}
+                  />
+                </div>
+                <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                  {allTopics.filter(t => t.toLowerCase().includes(topicSearch.toLowerCase())).map(topic => {
+                    const isActive = selectedTopic === topic;
+                    return (
+                      <div
+                        key={topic}
+                        onClick={() => { setSelectedTopic(topic); setSelectedBarStatus(null); setTopicSearch(''); const dd = topicDropdownRef.current?.querySelector<HTMLDivElement>('.topic-dd'); if (dd) dd.style.display = 'none'; }}
+                        style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px', color: isActive ? C.teal : C.text, fontWeight: isActive ? 700 : 400, background: isActive ? C.tealSoft : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = C.cardAlt; }}
+                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        {topic}
+                        {isActive && <svg width="13" height="13" fill="none" stroke={C.teal} strokeWidth="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Bar Charts row ── */}
@@ -583,6 +637,9 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
           )}
           {classFilter !== 'All' && (
             <span style={{ marginLeft: '8px', color: C.blue, fontWeight: 600 }}>· Class {classFilter}</span>
+          )}
+          {sectionFilter !== 'All' && (
+            <span style={{ marginLeft: '8px', color: C.teal, fontWeight: 600 }}>· {sectionFilter}</span>
           )}
         </div>
 
@@ -703,9 +760,8 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
               data={classwiseBreakdown}
               height={340}
               showXAxisLabels
-              horizontal
-              maxBarSize={18}
-              barCategoryGap="30%"
+              maxBarSize={32}
+              barCategoryGap="25%"
               segments={[
                 { key: 'On Track',       label: 'On Track',       color: '#10B981' },
                 { key: 'Slightly Off',   label: 'Slightly Off',   color: '#F59E0B' },
@@ -716,122 +772,16 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         )}
       </div>{/* end flex row */}
 
-      {/* ── Topic filter dropdown ── */}
-      {allTopics.length > 1 && (
-        <div style={{ marginBottom: '16px', background: C.card, borderRadius: '12px', border: `1px solid ${C.border}`, padding: '14px 18px', boxShadow: C.shadow }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px' }}>
-            Filter students by topic
-          </div>
-          <div ref={topicDropdownRef} style={{ position: 'relative' }}>
-            {/* Trigger */}
-            <button
-              onClick={() => { setTopicDropdownOpen(o => !o); setTopicSearch(''); }}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '9px 14px', borderRadius: '10px', cursor: 'pointer', fontFamily: FONT,
-                border: `1.5px solid ${topicDropdownOpen ? C.teal : C.border}`,
-                background: topicDropdownOpen ? C.tealSoft : C.cardAlt,
-                color: selectedTopic === 'All' ? C.textMuted : C.teal,
-                fontSize: '13px', fontWeight: selectedTopic === 'All' ? 500 : 700,
-                transition: 'all 0.15s', textAlign: 'left',
-              }}
-            >
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {selectedTopic === 'All' ? 'All topics' : selectedTopic}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                {selectedTopic !== 'All' && (
-                  <span
-                    onClick={e => { e.stopPropagation(); setSelectedTopic('All'); setSelectedBarStatus(null); setTopicDropdownOpen(false); }}
-                    style={{ fontSize: '14px', color: C.textMuted, lineHeight: 1, cursor: 'pointer' }}
-                  >✕</span>
-                )}
-                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
-                  style={{ transform: topicDropdownOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.15s', color: C.textMuted }}>
-                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-            </button>
-
-            {/* Dropdown panel */}
-            {topicDropdownOpen && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50,
-                background: C.card, border: `1.5px solid ${C.teal}`, borderRadius: '12px',
-                boxShadow: C.shadowLg, overflow: 'hidden',
-              }}>
-                {/* Search input */}
-                <div style={{ padding: '10px 12px', borderBottom: `1px solid ${C.border}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: C.cardAlt, borderRadius: '8px', padding: '7px 12px' }}>
-                    <svg width="13" height="13" fill="none" stroke={C.textMuted} strokeWidth="2" viewBox="0 0 24 24">
-                      <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-                    </svg>
-                    <input
-                      autoFocus
-                      value={topicSearch}
-                      onChange={e => setTopicSearch(e.target.value)}
-                      placeholder="Search topics…"
-                      style={{
-                        border: 'none', background: 'transparent', outline: 'none',
-                        fontSize: '13px', fontFamily: FONT, color: C.text, width: '100%',
-                      }}
-                    />
-                    {topicSearch && (
-                      <span onClick={() => setTopicSearch('')} style={{ cursor: 'pointer', color: C.textMuted, fontSize: '13px' }}>✕</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Options list */}
-                <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
-                  {allTopics
-                    .filter(t => t.toLowerCase().includes(topicSearch.toLowerCase()))
-                    .map(topic => {
-                      const isActive = selectedTopic === topic;
-                      return (
-                        <div
-                          key={topic}
-                          onClick={() => { setSelectedTopic(topic); setSelectedBarStatus(null); setTopicDropdownOpen(false); setTopicSearch(''); }}
-                          style={{
-                            padding: '9px 14px', cursor: 'pointer', fontFamily: FONT,
-                            fontSize: '13px', fontWeight: isActive ? 700 : 400,
-                            color: isActive ? C.teal : C.text,
-                            background: isActive ? C.tealSoft : 'transparent',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            transition: 'background 0.1s',
-                          }}
-                          onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = C.cardAlt; }}
-                          onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                        >
-                          {topic}
-                          {isActive && (
-                            <svg width="14" height="14" fill="none" stroke={C.teal} strokeWidth="2.5" viewBox="0 0 24 24">
-                              <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          )}
-                        </div>
-                      );
-                    })}
-                  {allTopics.filter(t => t.toLowerCase().includes(topicSearch.toLowerCase())).length === 0 && (
-                    <div style={{ padding: '20px', textAlign: 'center', color: C.textMuted, fontSize: '13px' }}>No topics match</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Inline threshold slider (topic mode only) ── */}
+      {/* ── Inline threshold slider ── */}
       {selectedTopic !== 'All' && (
         <div style={{ marginBottom: '16px' }}>
           <DualRangeSlider
             title={`Threshold for "${selectedTopic}"`}
             min={0} max={100} unit="%"
-            low={draftThresholds.quizCompletelyOff}
-            high={draftThresholds.quizSlightlyOff}
-            onLow={v => { const t = { ...draftThresholds, quizCompletelyOff: v }; setDraftThresholds(t); setThresholds(t); }}
-            onHigh={v => { const t = { ...draftThresholds, quizSlightlyOff: v }; setDraftThresholds(t); setThresholds(t); }}
+            low={draftThresholds.completelyOff}
+            high={draftThresholds.slightlyOff}
+            onLow={v => { const t = { ...draftThresholds, completelyOff: v }; setDraftThresholds(t); setThresholds(t); }}
+            onHigh={v => { const t = { ...draftThresholds, slightlyOff: v }; setDraftThresholds(t); setThresholds(t); }}
           />
         </div>
       )}
@@ -889,24 +839,14 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
               return (
               <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-                {paged.map(({ student, status, minutesAvg, quizAvgScore, examAvg, totalExams: te }) => {
+                {paged.map(({ student, status, quizAvgScore, mockAvgScore }) => {
                   const scfg = STATUS_CONFIG[status];
-
-                  const quizBarColor = quizAvgScore == null ? '#F43F5E'
-                    : quizAvgScore >= thresholds.quizSlightlyOff  ? '#10B981'
-                    : quizAvgScore >= thresholds.quizCompletelyOff ? '#F59E0B'
-                    : '#F43F5E';
-
-                  const examBarColor = examAvg == null ? '#F43F5E'
-                    : examAvg >= thresholds.examSlightlyOff  ? '#10B981'
-                    : examAvg >= thresholds.examCompletelyOff ? '#F59E0B'
-                    : '#F43F5E';
 
                   return (
                     <div
                       key={student.student_id}
                       onClick={() => {
-                        const ss = { student, status, minutesAvg, daysActive: 0, quizAvgScore, examAvg, totalExams: te };
+                        const ss = { student, status, quizAvgScore, mockAvgScore };
                         if (selectedTopic !== 'All') setTopicModalStudent(ss);
                         else setSelectedStudentStatus(ss);
                       }}
@@ -929,35 +869,34 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
                         {[student.grade, student.section].filter(Boolean).join(' · ') || '—'}
                       </div>
 
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 9px', borderRadius: '99px', background: scfg.bg, marginBottom: '12px' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 9px', borderRadius: '99px', background: scfg.bg, marginBottom: '10px' }}>
                         <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: scfg.color, flexShrink: 0 }} />
                         <span style={{ fontSize: '11px', fontWeight: 700, color: scfg.color }}>{scfg.label}</span>
                       </div>
 
-                      {/* Stats */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <ScoreRow
-                          label={selectedTopic !== 'All' ? selectedTopic : 'Quiz avg'}
-                          value={hasQuizData || selectedTopic !== 'All' ? (quizAvgScore != null ? `${quizAvgScore}%` : 'No attempt') : '—'}
-                          pct={quizAvgScore != null ? Math.min(100, quizAvgScore) : 0}
-                          barColor={quizBarColor}
-                          showBar={(hasQuizData || selectedTopic !== 'All') && quizAvgScore != null}
-                          valueColor={hasQuizData || selectedTopic !== 'All' ? (quizAvgScore != null ? quizBarColor : '#F43F5E') : C.textMuted}
-                        />
-                        {selectedTopic === 'All' && (
-                          <ScoreRow
-                            label="Exam avg"
-                            value={te > 0 ? (examAvg != null ? `${examAvg}%` : 'No attempt') : '—'}
-                            pct={examAvg != null ? Math.min(100, examAvg) : 0}
-                            barColor={examBarColor}
-                            showBar={te > 0 && examAvg != null}
-                            valueColor={te > 0 ? (examAvg != null ? examBarColor : '#F43F5E') : C.textMuted}
-                          />
-                        )}
+                      {/* Score rows */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '10px' }}>
+                        {[
+                          { label: 'Spotcheck', score: quizAvgScore },
+                          { label: 'Mock',      score: mockAvgScore },
+                        ].map(({ label, score }) => {
+                          const scoreCol = score == null ? C.textMuted
+                            : score >= thresholds.slightlyOff  ? '#10B981'
+                            : score >= thresholds.completelyOff ? '#F59E0B'
+                            : '#F43F5E';
+                          return (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '10px', color: C.textMuted }}>{label}</span>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: scoreCol }}>
+                                {score != null ? `${score}%` : '—'}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {/* View details hint */}
-                      <div style={{ marginTop: '10px', fontSize: '10px', color: C.textMuted, textAlign: 'right' }}>
+                      <div style={{ fontSize: '10px', color: C.textMuted, textAlign: 'right' }}>
                         {selectedTopic !== 'All' ? 'Tap for attempts →' : 'Tap for topics →'}
                       </div>
                     </div>
@@ -1030,7 +969,7 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
             merged.set(topic, { correct: prev.correct + correct, total: prev.total + total, sources: prev.sources.includes(label) ? prev.sources : [...prev.sources, label] });
           });
         };
-        addSource(quizTopicMap.get(sid), 'Quiz');
+        addSource(quizTopicMap.get(sid), 'Spotcheck');
         addSource(prepTopicMap.get(sid), 'Pre-assessment');
         return (
           <TopicBreakdownModal
@@ -1042,73 +981,25 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         );
       })()}
 
-      {/* ── Topic Attempt Modal ── */}
+      {/* ── Student Detail Modal ── */}
       {topicModalStudent && selectedTopic !== 'All' && (() => {
         const sid = topicModalStudent.student.student_id;
-        const attempts = (topicAttemptMap.get(sid)?.get(selectedTopic) ?? [])
+        const quizAttempts = (topicAttemptMap.get(sid)?.get(selectedTopic) ?? [])
           .slice()
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        const chartData = attempts.map((a, i) => ({
-          label: `${i + 1}`,
-          chartKey: `${i + 1}`,
-          Correct: a.correct,
-          Incorrect: a.incorrect,
-        }));
-        const cfg = STATUS_CONFIG[topicModalStudent.status];
+        const normTopic = normalizeChapterName(selectedTopic);
+        const mockAttempts = (mockTopicMap.get(sid)?.get(normTopic) ?? [])
+          .slice()
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         return (
-          <div
-            onClick={() => setTopicModalStudent(null)}
-            style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
-          >
-            <div
-              onClick={e => e.stopPropagation()}
-              style={{ background: C.card, borderRadius: '20px', border: `1.5px solid ${cfg.border}`, width: '100%', maxWidth: '520px', overflow: 'hidden', boxShadow: C.shadowLg, fontFamily: FONT }}
-            >
-              {/* Header */}
-              <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: cfg.bg }}>
-                <div>
-                  <div style={{ fontSize: '16px', fontWeight: 800, color: cfg.color }}>{topicModalStudent.student.full_name}</div>
-                  <div style={{ fontSize: '12px', color: C.textSecondary, marginTop: '2px' }}>{selectedTopic}</div>
-                </div>
-                <button onClick={() => setTopicModalStudent(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: '4px' }}>
-                  <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
-                </button>
-              </div>
-
-              {/* Stats */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: C.cardAlt, borderBottom: `1px solid ${C.border}` }}>
-                {[
-                  { label: 'Attempts', value: String(attempts.length), color: C.teal },
-                  { label: 'Topic Score', value: topicModalStudent.quizAvgScore != null ? `${topicModalStudent.quizAvgScore}%` : '—', color: cfg.color },
-                  { label: 'Status', value: cfg.label, color: cfg.color },
-                ].map((s, i) => (
-                  <div key={s.label} style={{ padding: '14px', textAlign: 'center', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none' }}>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: s.color }}>{s.value}</div>
-                    <div style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '4px' }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Chart */}
-              <div style={{ padding: '16px 22px 20px' }}>
-                {attempts.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px 0', color: C.textMuted, fontSize: '13px' }}>No attempt data for this topic.</div>
-                ) : (
-                  <StackedBarChart
-                    title="Attempt Outcome"
-                    data={chartData}
-                    xDataKey="chartKey"
-                    xTickFormatter={(v) => `#${v}`}
-                    tooltipLabelFormatter={(v) => `Attempt ${v}`}
-                    segments={[
-                      { key: 'Correct', label: 'Correct', color: '#10B981' },
-                      { key: 'Incorrect', label: 'Incorrect', color: '#F43F5E' },
-                    ]}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
+          <StudentDetailModal
+            studentStatus={topicModalStudent}
+            selectedTopic={selectedTopic}
+            quizAttempts={quizAttempts}
+            mockAttempts={mockAttempts}
+            thresholds={thresholds}
+            onClose={() => setTopicModalStudent(null)}
+          />
         );
       })()}
 
@@ -1231,14 +1122,18 @@ interface TopicBreakdownModalProps {
 }
 
 const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus, topicMap, thresholds, onClose }) => {
-  const { student, status, quizAvgScore, examAvg, totalExams } = studentStatus;
+  const { student, status, quizAvgScore } = studentStatus;
   const cfg = STATUS_CONFIG[status];
+  const scoreColor = (s: number | null) => s == null ? '#F43F5E'
+    : s >= thresholds.slightlyOff  ? '#10B981'
+    : s >= thresholds.completelyOff ? '#F59E0B'
+    : '#F43F5E';
 
   const topics = Array.from(topicMap.entries()).map(([name, { correct, total, sources }]) => {
     const pct = Math.round((correct / total) * 100);
     const topicStatus: TrackStatus =
-      pct < thresholds.quizCompletelyOff ? 'completely-off' :
-      pct < thresholds.quizSlightlyOff   ? 'slightly-off' : 'on-track';
+      pct < thresholds.completelyOff ? 'completely-off' :
+      pct < thresholds.slightlyOff   ? 'slightly-off' : 'on-track';
     return { name, correct, total, pct, topicStatus, sources };
   }).sort((a, b) => a.pct - b.pct);
 
@@ -1273,22 +1168,8 @@ const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus
         {/* Summary stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1px', background: '#1E293B', borderBottom: '1px solid #1E293B' }}>
           {[
-            {
-              label: 'Quiz avg score',
-              value: quizAvgScore != null ? `${quizAvgScore}%` : 'No attempt',
-              color: quizAvgScore == null ? '#F43F5E'
-                : quizAvgScore >= thresholds.quizSlightlyOff  ? '#10B981'
-                : quizAvgScore >= thresholds.quizCompletelyOff ? '#F59E0B'
-                : '#F43F5E',
-            },
-            {
-              label: 'Exam avg score',
-              value: totalExams > 0 ? (examAvg != null ? `${examAvg}%` : 'No attempt') : '—',
-              color: examAvg == null ? (totalExams > 0 ? '#F43F5E' : '#94A3B8')
-                : examAvg >= thresholds.examSlightlyOff  ? '#10B981'
-                : examAvg >= thresholds.examCompletelyOff ? '#F59E0B'
-                : '#F43F5E',
-            },
+            { label: 'Spotcheck Score', value: quizAvgScore != null ? `${quizAvgScore}%` : '—', color: scoreColor(quizAvgScore) },
+            { label: 'Status',         value: cfg.label,                                        color: cfg.color },
           ].map(({ label, value, color }) => (
             <div key={label} style={{ background: '#1a2332', padding: '14px 16px', textAlign: 'center' }}>
               <div style={{ fontSize: '15px', fontWeight: 800, color }}>{value}</div>
@@ -1319,7 +1200,7 @@ const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus
                         <span style={{ fontSize: '13px', fontWeight: 600, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                         <span style={{ fontSize: '11px', color: '#94A3B8', flexShrink: 0 }}>{correct}/{total}</span>
                         {sources.map(s => (
-                          <span key={s} style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: 600, background: s === 'Quiz' ? 'rgba(20,184,166,0.15)' : 'rgba(124,58,237,0.15)', color: s === 'Quiz' ? '#14B8A6' : '#7C3AED', flexShrink: 0 }}>{s}</span>
+                          <span key={s} style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: 600, background: s === 'Spotcheck' ? 'rgba(20,184,166,0.15)' : 'rgba(124,58,237,0.15)', color: s === 'Spotcheck' ? '#14B8A6' : '#7C3AED', flexShrink: 0 }}>{s}</span>
                         ))}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -1336,6 +1217,169 @@ const TopicBreakdownModal: React.FC<TopicBreakdownModalProps> = ({ studentStatus
                 );
               })}
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface StudentDetailModalProps {
+  studentStatus: StudentStatus;
+  selectedTopic: string;
+  quizAttempts: Array<{ correct: number; incorrect: number; date: string }>;
+  mockAttempts: MockAttempt[];
+  thresholds: Thresholds;
+  onClose: () => void;
+}
+
+const StudentDetailModal: React.FC<StudentDetailModalProps> = ({ studentStatus, selectedTopic, quizAttempts, mockAttempts, thresholds, onClose }) => {
+  const { student, status, quizAvgScore, mockAvgScore } = studentStatus;
+  const cfg = STATUS_CONFIG[status];
+  const [activeTab, setActiveTab] = React.useState<'quiz' | 'mock'>('quiz');
+
+  const scoreColor = (s: number | null) =>
+    s == null ? '#94A3B8'
+    : s >= thresholds.slightlyOff  ? '#10B981'
+    : s >= thresholds.completelyOff ? '#F59E0B'
+    : '#F43F5E';
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: C.card, borderRadius: '20px', border: `1.5px solid ${C.border}`, width: '100%', maxWidth: '520px', maxHeight: '84vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: C.shadowLg, fontFamily: FONT }}
+      >
+        {/* Header */}
+        <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: C.text }}>{student.full_name}</div>
+            <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '3px' }}>
+              {[student.grade, student.section].filter(Boolean).join(' · ') || '—'}
+              <span style={{ margin: '0 6px', color: C.border }}>·</span>
+              <span style={{ color: C.teal, fontWeight: 600 }}>{selectedTopic}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 11px', borderRadius: '99px', background: cfg.bg, border: `1px solid ${cfg.border}` }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: cfg.color }} />
+              <span style={{ fontSize: '11px', fontWeight: 700, color: cfg.color }}>{cfg.label}</span>
+            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: '4px', display: 'flex' }}>
+              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: C.cardAlt, borderBottom: `1px solid ${C.border}` }}>
+          {[
+            { label: 'Spotcheck %', value: quizAvgScore != null ? `${quizAvgScore}%` : '—', color: scoreColor(quizAvgScore) },
+            { label: 'Mock %',      value: mockAvgScore != null ? `${mockAvgScore}%` : '—',  color: scoreColor(mockAvgScore) },
+            { label: 'Status',      value: cfg.label,                                         color: cfg.color },
+          ].map(({ label, value, color }, i) => (
+            <div key={label} style={{ padding: '14px 12px', textAlign: 'center', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+              <div style={{ fontSize: '22px', fontWeight: 800, color }}>{value}</div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '3px' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.card }}>
+          {([['quiz', `Spotcheck Attempts (${quizAttempts.length})`], ['mock', `Mock Exams (${mockAttempts.length})`]] as const).map(([tab, label]) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                flex: 1, padding: '11px 12px', border: 'none', cursor: 'pointer', fontFamily: FONT,
+                fontSize: '12px', fontWeight: activeTab === tab ? 700 : 500,
+                color: activeTab === tab ? C.teal : C.textMuted,
+                background: 'transparent',
+                borderBottom: activeTab === tab ? `2px solid ${C.teal}` : '2px solid transparent',
+                transition: 'all 0.15s',
+              }}
+            >{label}</button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+          {activeTab === 'quiz' ? (
+            quizAttempts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '13px' }}>
+                No spotcheck data for "{selectedTopic}".
+              </div>
+            ) : (
+              <>
+                <StackedBarChart
+                  title="Spotcheck Attempt Outcomes"
+                  data={quizAttempts.map((a, i) => ({ label: `${i + 1}`, chartKey: `${i + 1}`, Correct: a.correct, Incorrect: a.incorrect }))}
+                  xDataKey="chartKey"
+                  xTickFormatter={(v) => `#${v}`}
+                  tooltipLabelFormatter={(v) => `Attempt ${v}`}
+                  segments={[
+                    { key: 'Correct', label: 'Correct', color: '#10B981' },
+                    { key: 'Incorrect', label: 'Incorrect', color: '#F43F5E' },
+                  ]}
+                />
+                <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {quizAttempts.map((a, i) => {
+                    const total = a.correct + a.incorrect;
+                    const pct = total > 0 ? Math.round((a.correct / total) * 100) : 0;
+                    const pctColor = pct >= thresholds.slightlyOff ? '#10B981' : pct >= thresholds.completelyOff ? '#F59E0B' : '#F43F5E';
+                    return (
+                      <div key={i} style={{ padding: '10px 14px', background: C.cardAlt, borderRadius: '10px', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: C.textMuted, width: '22px', flexShrink: 0 }}>#{i + 1}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '11px', color: C.textMuted }}>
+                            {a.correct}/{total} correct
+                            {a.date ? ` · ${new Date(a.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                          </div>
+                          <div style={{ height: '4px', borderRadius: '99px', background: C.border, marginTop: '5px' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', borderRadius: '99px', background: pctColor }} />
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: pctColor, flexShrink: 0 }}>{pct}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )
+          ) : (
+            mockAttempts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '13px' }}>
+                No mock exam data for "{selectedTopic}".
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {mockAttempts.map((a, i) => {
+                  const pctColor = scoreColor(a.score);
+                  return (
+                    <div key={i} style={{ padding: '10px 14px', background: C.cardAlt, borderRadius: '10px', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: C.textMuted, width: '22px', flexShrink: 0 }}>#{i + 1}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: C.text, marginBottom: '2px' }}>
+                          {a.examTitle || 'Mock Exam'}
+                        </div>
+                        <div style={{ fontSize: '11px', color: C.textMuted }}>
+                          {a.correct}/{a.total} correct
+                          {a.date ? ` · ${new Date(a.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                        </div>
+                        <div style={{ height: '4px', borderRadius: '99px', background: C.border, marginTop: '5px' }}>
+                          <div style={{ width: `${a.score}%`, height: '100%', borderRadius: '99px', background: pctColor }} />
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: pctColor, flexShrink: 0 }}>{a.score}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
       </div>

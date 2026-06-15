@@ -55,6 +55,44 @@ export const dashboardAPI = {
     return response.data;
   },
 
+  getUserLoginLogs: async (username: string, limit: number = 500) => {
+    const response = await api.post('/api/external-data/user-login-logs/by-username', { username, limit });
+    return response.data as {
+      student_id: number;
+      student_name: string;
+      username: string;
+      total_days: number;
+      total_sessions: number;
+      total_time_seconds: number;
+      items: Array<{
+        date: string;
+        total_sessions: number;
+        completed_sessions: number;
+        active_sessions: number;
+        total_time_seconds: number;
+        first_login_time: string | null;
+        last_logout_time: string | null;
+        api_request_count: number;
+        sessions: Array<{
+          session_id: number;
+          login_time: string | null;
+          logout_time: string | null;
+          is_active: boolean;
+          session_duration_seconds: number;
+          segment_duration_seconds: number;
+          api_request_count: number;
+          activities: Array<{
+            timestamp: string | null;
+            path: string | null;
+            method: string | null;
+            status_code: number | null;
+            request_data: any;
+          }>;
+        }>;
+      }>;
+    };
+  },
+
   getTestPrepBySchoolCode: async (schoolCode: string, limit: number = 500) => {
     const response = await api.post('/api/external-data/test-prep/by-school-code', {
       school_code: schoolCode,
@@ -261,6 +299,48 @@ export interface ExamAttemptItem {
   grade: string;
 }
 
+export interface MockExamItem {
+  homework_id: number;
+  homework_code: string | null;
+  title: string | null;
+  description: string | null;
+  chapters: string[];
+  due_date: string | null;
+  date_assigned: string | null;
+  attachment: string | null;
+  teacher_id?: number | null;
+  teacher_name?: string | null;
+  teacher_username?: string | null;
+  question_count: number;
+  total_submissions: number;
+  average_score: number | null;
+}
+
+export interface MockExamClassSectionRequest {
+  school_code: string;
+  class_id?: number;
+  class_code?: string;
+  section_id?: number;
+  section_name?: string;
+  limit?: number;
+}
+
+export interface MockExamResultItem {
+  student_id: number;
+  student_name: string;
+  username: string | null;
+  roll_number: string | null;
+  class_name: string | null;
+  section_name: string | null;
+  score: number;
+  correct: number;
+  incorrect: number;
+  unanswered: number;
+  total: number;
+  time_spent_seconds: number;
+  submitted_at: string | null;
+}
+
 export const examAPI = {
   getTeacherExams: async (username: string, limit: number = 100) => {
     const response = await api.post('/api/external-data/teacher-exams/by-username', { username, limit });
@@ -283,15 +363,70 @@ export const examAPI = {
       items: ExamAttemptItem[];
     };
   },
+
+  getMockExams: async (username: string, limit: number = 100) => {
+    const response = await api.post('/api/external-data/mock-exams/by-username', { username, limit });
+    return response.data as {
+      school_id: number;
+      school_name: string;
+      school_code: string;
+      teacher_id: number;
+      username: string;
+      total: number;
+      items: MockExamItem[];
+    };
+  },
+
+  getMockExamsByClassSection: async (request: MockExamClassSectionRequest) => {
+    const response = await api.post('/api/external-data/mock-exams/by-class-section', request);
+    return response.data as {
+      school_id: number;
+      school_name: string;
+      school_code: string;
+      class_id: number;
+      class_name: string | null;
+      section_id: number | null;
+      section_name: string | null;
+      total: number;
+      items: MockExamItem[];
+    };
+  },
+
+  getMockExamResults: async (homeworkId: number, limit: number = 500) => {
+    const response = await api.post('/api/external-data/mock-exams/results/by-homework-id', { homework_id: homeworkId, limit });
+    return response.data as {
+      homework_id: number;
+      homework_code: string;
+      title: string;
+      description: string;
+      due_date: string | null;
+      date_assigned: string | null;
+      attachment: string | null;
+      teacher_id: number;
+      teacher_name: string;
+      username: string;
+      school_id: number;
+      school_name: string;
+      school_code: string;
+      question_count: number;
+      total_submissions: number;
+      average_score: number;
+      total: number;
+      items: MockExamResultItem[];
+    };
+  },
 };
 
 // ============= Scheduled Assignment APIs =============
 export interface ScheduledAssignmentItem {
   assignment_id: string;
+  id?: number;
   assignment_code: string | null;
+  homework_code?: string | null;
   title: string | null;
   status: string | null;
   scheduled_date: string | null;
+  date_assigned?: string | null;
   due_date: string | null;
   class_id: number | null;
   class_name: string | null;
