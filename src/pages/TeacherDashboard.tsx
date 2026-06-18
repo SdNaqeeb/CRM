@@ -10,6 +10,7 @@ import StudentDetailModal from '../components/StudentDetailModal';
 import ActivityFeed from '../components/ActivityFeed';
 import WeeklyExamResults from '../components/WeeklyExamResults';
 import MockExamResults from '../components/MockExamResults';
+import MockExamAnalysis from '../components/MockExamAnalysis';
 import StudentTrackGrid, { TrackPreloadData } from '../components/StudentTrackGrid';
 import ScheduledAssignmentsPanel from '../components/ScheduledAssignmentsPanel';
 import DashboardIcon from '../components/DashboardIcon';
@@ -42,7 +43,7 @@ const TeacherDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [showGreeting, setShowGreeting] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'weekly-exams' | 'mock-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'weekly-exams' | 'mock-exams' | 'mock-exam-analysis' | 'jee-exams' | 'pre-assessment' | 'activity'>('overview');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
@@ -67,6 +68,10 @@ const TeacherDashboard: React.FC = () => {
   const [mockExamResultsLoading, setMockExamResultsLoading] = useState(false);
   const [mockExamClassFilter, setMockExamClassFilter] = useState('All');
   const [mockExamSectionFilter, setMockExamSectionFilter] = useState('All');
+
+  const [analysisExamId, setAnalysisExamId] = useState<number | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<MockExamResultItem[] | null>(null);
+  const [analysisResultsLoading, setAnalysisResultsLoading] = useState(false);
 
   const [compareExamIds, setCompareExamIds] = useState<[number, number] | null>(null);
   const [compareResults, setCompareResults] = useState<{ exam1: MockExamResultItem[]; exam2: MockExamResultItem[] } | null>(null);
@@ -332,6 +337,25 @@ const TeacherDashboard: React.FC = () => {
       setCompareResults({ exam1: [], exam2: [] });
     } finally {
       setCompareLoading(false);
+    }
+  };
+
+  const handleSelectAnalysisExam = async (id: number | null) => {
+    if (id === null || id === analysisExamId) {
+      setAnalysisExamId(null);
+      setAnalysisResults(null);
+      return;
+    }
+    setAnalysisExamId(id);
+    setAnalysisResults(null);
+    try {
+      setAnalysisResultsLoading(true);
+      const data = await examAPI.getMockExamResults(id);
+      setAnalysisResults(data.items ?? []);
+    } catch {
+      setAnalysisResults([]);
+    } finally {
+      setAnalysisResultsLoading(false);
     }
   };
 
@@ -608,7 +632,8 @@ const TeacherDashboard: React.FC = () => {
     { key: 'assignments'   as const, label: 'Assignments',           icon: 'calendar' },
     { key: 'daily-quizzes' as const, label: 'Daily Quizzes',         icon: 'file'     },
     { key: 'weekly-exams'  as const, label: 'Exams',                 icon: 'monitor'  },
-    { key: 'mock-exams'    as const, label: 'Mock Exams',            icon: 'target'   },
+    { key: 'mock-exams'          as const, label: 'Mock Exams',     icon: 'target'  },
+    { key: 'mock-exam-analysis'  as const, label: 'Exam Analysis',  icon: 'monitor' },
   ];
 
   const handleNavClick = (key: typeof activeTab) => {
@@ -618,13 +643,14 @@ const TeacherDashboard: React.FC = () => {
     if (key === 'daily-quizzes') loadQuizHomeworks();
     if (key === 'weekly-exams') loadTeacherExams();
     if (key === 'mock-exams') loadMockExams();
+    if (key === 'mock-exam-analysis') loadMockExams();
   };
 
   const sectionTitles: Record<typeof activeTab, string> = {
     'overview': 'Overview', 'track-status': 'Track Status',
     'assignments': 'Scheduled Assignments',
     'students': 'Students', 'daily-quizzes': 'Daily Quizzes',
-    'weekly-exams': 'Exams', 'mock-exams': 'Mock Exams', 'jee-exams': 'JEE Format',
+    'weekly-exams': 'Exams', 'mock-exams': 'Mock Exams', 'mock-exam-analysis': 'Mock Exam Analysis', 'jee-exams': 'JEE Format',
     'pre-assessment': 'Pre-Assessment', 'activity': 'Activity',
   };
 
@@ -657,6 +683,10 @@ const TeacherDashboard: React.FC = () => {
       { icon: '📉', title: 'Score Breakdown', description: 'Select an exam to see each student\'s score and attempt details.' },
     ],
     'mock-exams': [],
+    'mock-exam-analysis': [
+      { icon: '📊', title: 'Programme KPIs', description: 'Total exams, submissions, and weighted average score across all mock exams.' },
+      { icon: '📋', title: 'Exam List',      description: 'Full table of all mock exams with subject, date, submissions, and average.' },
+    ],
     activity: [
       { icon: '🕒', title: 'Activity Feed', description: 'Chronological log of student logins, quiz attempts, and exam submissions.' },
     ],
@@ -1036,6 +1066,18 @@ const TeacherDashboard: React.FC = () => {
           />
         )}
 
+
+        {/* ── Mock Exam Analysis ───────────────────────────────────────────── */}
+        {activeTab === 'mock-exam-analysis' && (
+          <MockExamAnalysis
+            exams={mockExams ?? []}
+            loading={mockExamsLoading}
+            selectedExamId={analysisExamId}
+            onSelectExam={handleSelectAnalysisExam}
+            examResults={analysisResults}
+            resultsLoading={analysisResultsLoading}
+          />
+        )}
 
         {/* ── Activity ─────────────────────────────────────────────────────── */}
         {activeTab === 'activity' && (

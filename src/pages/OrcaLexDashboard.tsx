@@ -6,6 +6,7 @@ import StudentTable from '../components/StudentTable';
 import ActivityFeed from '../components/ActivityFeed';
 import StudentDetailModal from '../components/StudentDetailModal';
 import { AdminAnalytics } from '../components/AnalyticsSections';
+import MockExamEngagementScatter from '../components/MockExamEngagementScatter';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const FONT_SERIF = "'Source Serif 4', Georgia, serif";
@@ -208,6 +209,9 @@ const OrcaLexDashboard: React.FC = () => {
         <div style={{ marginBottom: '16px' }}>
           <AdminAnalytics schools={data.schools} allStudents={data.all_students} />
         </div>
+
+        {/* Mock Exam: Student Engagement vs Improvement Scatter */}
+        <MockExamEngagementScatter />
 
         {/* Tabs with School Filter */}
         <div>

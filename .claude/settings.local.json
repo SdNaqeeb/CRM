@@ -22,7 +22,11 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d\\)[:300]\\)\")",
       "WebSearch",
       "Bash(Get-ChildItem -Recurse \"c:\\\\ff\\\\CRM_frontend\\\\misc\\\\teacher_dash_extracted\")",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\ff\\\\CRM_frontend\\\\src\" -Directory)",
+      "Bash(Select-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\ff\\\\CRM_frontend\\\\src\" -Name | Where-Object {$_ -match '^\\(utils|helpers|lib\\)$'})",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/recharts/package.json'\\).version\\)\")"
     ]
   }
 }

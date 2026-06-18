@@ -413,6 +413,8 @@ export const examAPI = {
       average_score: number;
       total: number;
       items: MockExamResultItem[];
+      
+
     };
   },
 };
