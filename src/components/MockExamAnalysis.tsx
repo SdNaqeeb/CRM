@@ -5,6 +5,7 @@ import {
   ScatterChart, Scatter,
 } from 'recharts';
 import { MockExamItem, MockExamResultItem, examAPI } from '../services/api';
+import { StudentEngagementSummary } from '../types';
 import {
   computeProgrammeKPIs,
   computeSubjectBreakdown,
@@ -17,6 +18,8 @@ import {
   flagFastPerfect,
   flagRushedAbandoned,
   computeNeedsReview,
+  computeStudentsAppeared,
+  computeNeverAppeared,
   inferSubject,
   fmtPct,
   fmtTimeMins,
@@ -70,11 +73,15 @@ interface Props {
   onSelectExam: (id: number | null) => void;
   examResults: MockExamResultItem[] | null;
   resultsLoading: boolean;
+  roster?: StudentEngagementSummary[];
+  onRefreshExams?: () => void;
 }
 
 const MockExamAnalysis: React.FC<Props> = ({
-  exams, loading, selectedExamId, onSelectExam, examResults, resultsLoading,
+  exams, loading, selectedExamId, onSelectExam, examResults, resultsLoading, roster, onRefreshExams,
 }) => {
+  const [neverAppearedClassFilter, setNeverAppearedClassFilter] = useState('');
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [compareExamId, setCompareExamId]     = useState<number | null>(null);
   const [compareResults, setCompareResults]   = useState<MockExamResultItem[] | null>(null);
   const [compareLoading, setCompareLoading]   = useState(false);
@@ -98,28 +105,39 @@ const MockExamAnalysis: React.FC<Props> = ({
       .finally(() => setCompareLoading(false));
   }, [compareExamId]);
 
-  // Recent exams deep-dive: top 5 most recent active exams, loaded in parallel
-  const recentExams = useMemo(() =>
+  // All active exams, loaded in parallel — feeds both the "recent" deep-dive
+  // (top 5) and the cross-exam unique-students-appeared summary (all of them).
+  const activeExams = useMemo(() =>
     [...exams]
       .filter(e => e.total_submissions > 0)
-      .sort((a, b) => (b.date_assigned ?? '').localeCompare(a.date_assigned ?? ''))
-      .slice(0, 5),
+      .sort((a, b) => (b.date_assigned ?? '').localeCompare(a.date_assigned ?? '')),
   [exams]);
-  const recentKey = recentExams.map(e => e.homework_id).join(',');
-  const [recentResultsMap, setRecentResultsMap] = useState<Map<number, MockExamResultItem[]>>(new Map());
-  const [recentLoading, setRecentLoading] = useState(false);
+  const recentExams = useMemo(() => activeExams.slice(0, 5), [activeExams]);
+  const activeKey = activeExams.map(e => e.homework_id).join(',');
+  const [allResultsMap, setAllResultsMap] = useState<Map<number, MockExamResultItem[]>>(new Map());
+  const [allLoading, setAllLoading] = useState(false);
   useEffect(() => {
-    if (!recentExams.length) return;
-    setRecentLoading(true);
-    Promise.all(recentExams.map(e =>
+    if (!activeExams.length) return;
+    setAllLoading(true);
+    Promise.all(activeExams.map(e =>
       examAPI.getMockExamResults(e.homework_id)
         .then(d => [e.homework_id, d.items ?? []] as [number, MockExamResultItem[]])
         .catch(() => [e.homework_id, []] as [number, MockExamResultItem[]])
     ))
-      .then(pairs => setRecentResultsMap(new Map(pairs)))
-      .finally(() => setRecentLoading(false));
+      .then(pairs => setAllResultsMap(new Map(pairs)))
+      .finally(() => setAllLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recentKey]);
+  }, [activeKey, refreshNonce]);
+  const recentResultsMap = allResultsMap;
+  const recentLoading = allLoading;
+
+  // Manual refresh: re-pull the exam list from the parent (picks up brand-new
+  // exams) and force a re-fetch of all exam results (picks up new submissions
+  // on exams we already know about, which activeKey alone wouldn't catch).
+  const handleRefresh = () => {
+    onRefreshExams?.();
+    setRefreshNonce(n => n + 1);
+  };
 
   // Unique subjects across all exams (for filter dropdown) — must be before early return
   const allSubjects = useMemo(() =>
@@ -130,6 +148,11 @@ const MockExamAnalysis: React.FC<Props> = ({
 
   const kpis        = computeProgrammeKPIs(exams);
   const subjects    = computeSubjectBreakdown(exams);
+  const appeared    = computeStudentsAppeared(activeExams, allResultsMap);
+  const neverAppeared = computeNeverAppeared(roster ?? [], activeExams, allResultsMap);
+  const filteredNeverAppeared = neverAppearedClassFilter
+    ? neverAppeared.students.filter(s => s.className === neverAppearedClassFilter)
+    : neverAppeared.students;
   const sortedExams = [...exams].sort((a, b) =>
     (b.date_assigned ?? '').localeCompare(a.date_assigned ?? '')
   );
@@ -285,6 +308,147 @@ const MockExamAnalysis: React.FC<Props> = ({
           </tbody>
         </table>
       </div>
+
+      {/* ── Students Appeared — Unique ──────────────────────────────────────── */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', boxShadow: C.shadow }}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: C.cardAlt, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Students Appeared — Unique</span>
+          <span style={{ padding: '2px 8px', borderRadius: 99, background: C.purpleSoft, fontSize: 11, fontWeight: 700, color: C.purple }}>
+            {appeared.totalUnique.toLocaleString()} total
+          </span>
+          <span style={{ fontSize: 12, color: C.textMuted }}>deduped across all active exams — not submission counts</span>
+          {allLoading && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 'auto' }}>Loading…</span>}
+          <button
+            onClick={handleRefresh}
+            disabled={allLoading}
+            style={{
+              marginLeft: allLoading ? undefined : 'auto', padding: '5px 12px', borderRadius: 8,
+              border: `1px solid ${C.border}`, background: C.card, color: allLoading ? C.textMuted : C.purple,
+              fontSize: 12, fontWeight: 700, cursor: allLoading ? 'wait' : 'pointer', fontFamily: FONT,
+            }}
+          >
+            {allLoading ? 'Refreshing…' : '↻ Refresh'}
+          </button>
+        </div>
+
+        {allLoading ? (
+          <Loader />
+        ) : (
+          <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+            {/* Subject stat chips */}
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+              <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', minWidth: 120 }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1, marginBottom: 6 }}>{appeared.totalUnique}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted }}>Total Unique</div>
+              </div>
+              {appeared.bySubject.map(s => {
+                const sc = SUBJECT_COLOR[s.key] ?? { text: C.textSecondary, bg: C.cardAlt };
+                return (
+                  <div key={s.key} style={{ background: sc.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', minWidth: 120 }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: sc.text, fontFamily: FONT_SERIF, lineHeight: 1, marginBottom: 6 }}>{s.count}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: sc.text }}>{s.key}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Class × Subject matrix */}
+            {appeared.byClass.length > 0 && (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: C.cardAlt, borderBottom: `1px solid ${C.border}` }}>
+                      {['Class', ...appeared.bySubject.map(s => s.key), 'Unique (any subject)'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Class' ? 'left' : 'center', fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {appeared.byClass.map((c, i) => (
+                      <tr key={c.key} style={{ borderBottom: i < appeared.byClass.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : C.cardAlt }}>
+                        <td style={{ padding: '11px 16px', fontWeight: 600, color: C.text }}>{c.key}</td>
+                        {appeared.bySubject.map(s => {
+                          const cell = appeared.byClassSubject.find(cs => cs.className === c.key && cs.subject === s.key);
+                          return (
+                            <td key={s.key} style={{ padding: '11px 16px', textAlign: 'center', color: cell ? C.text : C.textMuted, fontWeight: cell ? 700 : 400 }}>
+                              {cell ? cell.count : '—'}
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: '11px 16px', textAlign: 'center', fontWeight: 800, color: C.purple }}>{c.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Students Never Appeared ─────────────────────────────────────────── */}
+      {roster && roster.length > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden', boxShadow: C.shadow }}>
+          <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: C.cardAlt, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Students Never Appeared</span>
+            <span style={{ padding: '2px 8px', borderRadius: 99, background: neverAppeared.total > 0 ? C.redSoft : C.greenSoft, fontSize: 11, fontWeight: 700, color: neverAppeared.total > 0 ? C.red : C.green }}>
+              {neverAppeared.total.toLocaleString()} of {neverAppeared.consideredTotal.toLocaleString()}
+            </span>
+            <span style={{ fontSize: 12, color: C.textMuted }}>students in classes/sections with active exams, but zero submissions</span>
+            {allLoading && <span style={{ fontSize: 11, color: C.textMuted, marginLeft: 'auto' }}>Loading…</span>}
+            <div style={{ marginLeft: allLoading ? undefined : 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <select
+                value={neverAppearedClassFilter}
+                onChange={e => setNeverAppearedClassFilter(e.target.value)}
+                style={{ padding: '4px 8px', borderRadius: 8, border: `1.5px solid ${neverAppearedClassFilter ? C.purple : C.border}`, background: C.card, color: neverAppearedClassFilter ? C.purple : C.textMuted, fontSize: 12, fontFamily: FONT, cursor: 'pointer', fontWeight: neverAppearedClassFilter ? 700 : 400 }}
+              >
+                <option value="">All classes</option>
+                {neverAppeared.byClass.map(c => <option key={c.key} value={c.key}>Class {c.key} ({c.count})</option>)}
+              </select>
+            </div>
+          </div>
+
+          {allLoading ? (
+            <Loader />
+          ) : neverAppeared.total === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: C.green, fontWeight: 600, fontSize: 13 }}>
+              Every student on the roster has appeared in at least one active exam.
+            </div>
+          ) : (
+            <>
+              <div style={{ padding: '14px 20px 0', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {neverAppeared.byClass.map(c => (
+                  <span key={c.key} style={{ padding: '4px 10px', borderRadius: 99, background: C.redSoft, color: C.red, fontSize: 12, fontWeight: 700 }}>
+                    Class {c.key}: {c.count}
+                  </span>
+                ))}
+              </div>
+              <div style={{ maxHeight: 420, overflowY: 'auto', marginTop: 12 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: C.cardAlt, borderBottom: `1px solid ${C.border}` }}>
+                      {['#', 'Student', 'Class', 'Section'].map(h => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', position: 'sticky', top: 0, background: C.cardAlt }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredNeverAppeared.map((s, i) => (
+                      <tr key={s.studentId} style={{ borderBottom: i < filteredNeverAppeared.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : C.cardAlt }}>
+                        <td style={{ padding: '10px 16px', color: C.textMuted, fontSize: 12, fontWeight: 600 }}>{i + 1}</td>
+                        <td style={{ padding: '10px 16px', fontWeight: 600, color: C.text }}>{s.name}</td>
+                        <td style={{ padding: '10px 16px', color: C.textSecondary }}>{s.className}</td>
+                        <td style={{ padding: '10px 16px', color: C.textSecondary }}>{s.section}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Section 02: Recent Exams Deep-Dive ────────────────────────────── */}
       {recentExams.length > 0 && (() => {
@@ -766,7 +930,7 @@ const MockExamAnalysis: React.FC<Props> = ({
                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = noSubs ? 'rgba(244,63,94,0.03)' : i % 2 === 0 ? 'transparent' : C.cardAlt; }}
                   >
                     <td style={{ padding: '11px 16px', color: C.textSecondary, whiteSpace: 'nowrap', fontSize: 12 }}>
-                      {exam.date_assigned ? new Date(exam.date_assigned).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      {exam.date_assigned ? new Date(exam.date_assigned).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : '—'}
                     </td>
                     <td style={{ padding: '11px 16px', fontWeight: 600, color: isSelected ? C.purple : C.text, whiteSpace: 'nowrap', fontSize: 12 }}>
                       {exam.homework_code ?? `#${exam.homework_id}`}
@@ -969,12 +1133,12 @@ const MockExamAnalysis: React.FC<Props> = ({
                 )}
 
                 {!compareLoading && crossScores && (
-                  crossScores.length === 0 ? (
+                  crossScores!.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '20px 0', color: C.textMuted, fontSize: 13 }}>No students found in both exams.</div>
                   ) : (
                     <div>
                       <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8 }}>
-                        {crossScores.length} students sat both exams · points above the diagonal scored higher in {exam2Label}
+                        {crossScores!.length} students sat both exams · points above the diagonal scored higher in {exam2Label}
                       </div>
                       <ResponsiveContainer width="100%" height={300}>
                         <ScatterChart margin={{ top: 8, right: 24, bottom: 24, left: 0 }}>

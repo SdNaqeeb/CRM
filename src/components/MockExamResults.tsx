@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, LabelList,
+} from 'recharts';
 import { MockExamItem, MockExamResultItem, dashboardAPI } from '../services/api';
+import sectionSummerComparison from '../data/sectionSummerComparison.json';
+import { downloadSummerComparisonExcel, getSummerComparisonData, subjectStats, SummerComparisonData, StudentRow as SummerStudentRow } from '../utils/buildClass10SummerExcel';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 
@@ -15,11 +21,6 @@ interface MockExamResultsProps {
   onSelectExam: (homeworkId: number) => void;
   results: MockExamResultItem[] | null;
   resultsLoading: boolean;
-  compareExamIds: [number, number] | null;
-  compareResults: { exam1: MockExamResultItem[]; exam2: MockExamResultItem[] } | null;
-  compareLoading: boolean;
-  onCompare: (id1: number, id2: number, cls: string, sec: string) => void;
-  onExitCompare: () => void;
   onFetchExamsForSection: (classCode: string, sectionName?: string) => Promise<MockExamItem[]>;
 }
 
@@ -33,6 +34,7 @@ const C = {
   purple: '#7C3AED',
   purpleDark: '#6D28D9',
   purpleSoft: 'rgba(124,58,237,0.10)',
+  blue: '#3B82F6',
   green: '#10B981',
   greenSoft: 'rgba(16,185,129,0.12)',
   amber: '#F59E0B',
@@ -57,6 +59,13 @@ const formatChapter = (raw: string) =>
 const fmt = (v: string | null | undefined) =>
   v ? new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
 
+// Shifts a 'YYYY-MM-DD' date string by `days`, staying in local time (avoids UTC day-shift bugs).
+const shiftDate = (dateStr: string, days: number) => {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD
+};
+
 const fmtDur = (sec: number | null | undefined) => {
   const s = Number(sec ?? 0);
   if (s <= 0) return '-';
@@ -75,8 +84,18 @@ const Dots: React.FC<{ color?: string }> = ({ color = C.purple }) => (
 );
 
 const BackBtn: React.FC<{ onClick: () => void; label: string }> = ({ onClick, label }) => (
-  <button onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, padding: '7px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  <button
+    onClick={onClick}
+    style={{
+      display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16, padding: '9px 16px',
+      borderRadius: 10, border: `1.5px solid ${C.purple}`, background: C.purpleSoft,
+      color: C.purpleDark, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+      boxShadow: '0 1px 2px rgba(124,58,237,0.08)', transition: 'background 0.12s, transform 0.12s',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.background = C.purple; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+    onMouseLeave={e => { e.currentTarget.style.background = C.purpleSoft; e.currentTarget.style.color = C.purpleDark; e.currentTarget.style.transform = 'none'; }}
+  >
+    <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
     {label}
   </button>
 );
@@ -147,19 +166,15 @@ const CompareModal: React.FC<CompareModalProps> = ({ classOptions, sectionOption
   const canCompare = !!exam1 && !!exam2;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
-      <div style={{ background: C.card, borderRadius: 20, boxShadow: C.shadowLg, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+    <div style={{ background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: C.shadow, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
 
-        {/* Modal header */}
-        <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div>
-            <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>Compare Exams</div>
-            <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>Select a class and section, then pick two exams to compare</div>
-          </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', color: C.textMuted, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
-        </div>
+      {/* Header */}
+      <div style={{ padding: '20px 24px 16px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>Compare Exams</div>
+        <div style={{ fontSize: 12, color: C.textSecondary, marginTop: 2 }}>Select a class and section, then pick two exams to compare</div>
+      </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }} ref={scrollRef}>
+      <div style={{ padding: '20px 24px' }} ref={scrollRef}>
 
           {/* Class + Section selectors */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
@@ -285,23 +300,22 @@ const CompareModal: React.FC<CompareModalProps> = ({ classOptions, sectionOption
           )}
         </div>
 
-        {/* Modal footer */}
-        <div style={{ padding: '16px 24px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: C.card }}>
-          <div style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>
-            {canCompare ? `${exam1!.title ?? `#${exam1!.homework_id}`} vs ${exam2!.title ?? `#${exam2!.homework_id}`}` : 'Select 2 exams to compare'}
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-              Cancel
-            </button>
-            <button
-              onClick={() => canCompare && onConfirm(exam1!.homework_id, exam2!.homework_id, cls, sec)}
-              disabled={!canCompare}
-              style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: canCompare ? C.purple : C.border, color: canCompare ? '#fff' : C.textMuted, fontSize: 13, fontWeight: 700, cursor: canCompare ? 'pointer' : 'not-allowed', fontFamily: FONT, transition: 'background 0.15s' }}
-            >
-              Compare
-            </button>
-          </div>
+      {/* Footer */}
+      <div style={{ padding: '16px 24px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, background: C.card }}>
+        <div style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>
+          {canCompare ? `${exam1!.title ?? `#${exam1!.homework_id}`} vs ${exam2!.title ?? `#${exam2!.homework_id}`}` : 'Select 2 exams to compare'}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+            Reset
+          </button>
+          <button
+            onClick={() => canCompare && onConfirm(exam1!.homework_id, exam2!.homework_id, cls, sec)}
+            disabled={!canCompare}
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: canCompare ? C.purple : C.border, color: canCompare ? '#fff' : C.textMuted, fontSize: 13, fontWeight: 700, cursor: canCompare ? 'pointer' : 'not-allowed', fontFamily: FONT, transition: 'background 0.15s' }}
+          >
+            Compare
+          </button>
         </div>
       </div>
     </div>
@@ -636,6 +650,11 @@ const StudentStoryModal: React.FC<{ info: StoryStudentInfo; onClose: () => void 
 
 // ── Scatter quadrant config ──────────────────────────────────────────────────
 
+// Temporarily disabled in the UI — kept in code for later re-enabling.
+// (Typed as `boolean`, not the literal `false`, so TS doesn't treat the
+// gated JSX below as unreachable and skip narrowing checks inside it.)
+const SHOW_SCATTER_FEATURE: boolean = false;
+
 type QKey = 'app-drove' | 'review-content' | 'external-study' | 'needs-attention';
 const QCFG: Record<QKey, { label: string; color: string; bg: string; short: string }> = {
   'app-drove':       { label: 'App Drove This',     color: '#10B981', bg: 'rgba(16,185,129,0.11)',  short: 'Using app · Improving'      },
@@ -673,8 +692,8 @@ const CompareView: React.FC<CompareViewProps> = ({ exams, compareExamIds, compar
   const label1 = meta1?.title ?? meta1?.homework_code ?? `Exam #${compareExamIds[0]}`;
   const label2 = meta2?.title ?? meta2?.homework_code ?? `Exam #${compareExamIds[1]}`;
 
-  if (compareLoading) return <><BackBtn onClick={onExit} label="Back to Mock Exams" /><Dots /></>;
-  if (!compareResults) return <BackBtn onClick={onExit} label="Back to Mock Exams" />;
+  if (compareLoading) return <><BackBtn onClick={onExit} label="Compare Other Exams" /><Dots /></>;
+  if (!compareResults) return <BackBtn onClick={onExit} label="Compare Other Exams" />;
 
   const { exam1: raw1, exam2: raw2 } = compareResults;
   const map1 = new Map(raw1.map(r => [r.student_id, r]));
@@ -799,7 +818,7 @@ const CompareView: React.FC<CompareViewProps> = ({ exams, compareExamIds, compar
 
   return (
     <div style={{ fontFamily: FONT }}>
-      <BackBtn onClick={onExit} label="Back to Mock Exams" />
+      <BackBtn onClick={onExit} label="Compare Other Exams" />
 
       {/* Summary cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
@@ -843,7 +862,8 @@ const CompareView: React.FC<CompareViewProps> = ({ exams, compareExamIds, compar
         })()}
       </div>
 
-      {/* Scatter Plot toggle button */}
+      {/* Scatter Plot toggle button — disabled in UI for now */}
+      {SHOW_SCATTER_FEATURE && (
       <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
           onClick={() => { setShowSc(v => { if (!v) loadScatterData(); return !v; }); }}
@@ -869,9 +889,10 @@ const CompareView: React.FC<CompareViewProps> = ({ exams, compareExamIds, compar
           </span>
         )}
       </div>
+      )}
 
-      {/* Scatter Plot section */}
-      {showScatter && (
+      {/* Scatter Plot section — disabled in UI for now */}
+      {SHOW_SCATTER_FEATURE && showScatter && (
         <div style={{ marginBottom: 20 }}>
           {/* Legend row */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -983,8 +1004,9 @@ const CompareView: React.FC<CompareViewProps> = ({ exams, compareExamIds, compar
 
                 {/* Tooltip */}
                 {hoveredDot !== null && (() => {
-                  const p = scPts.find(pt => pt.student_id === hoveredDot);
-                  if (!p) return null;
+                  const found = scPts.find(pt => pt.student_id === hoveredDot);
+                  if (!found) return null;
+                  const p    = found;
                   const q    = getQ(p.delta, p.sessions, thr);
                   const qcfg = QCFG[q];
                   const cx   = xS(p.sessions);
@@ -1179,6 +1201,641 @@ const CompareView: React.FC<CompareViewProps> = ({ exams, compareExamIds, compar
   );
 };
 
+// ── Compare Mock Exams (standalone tab) ─────────────────────────────────────
+
+interface CompareMockExamsProps {
+  exams: MockExamItem[];
+  examClassOptions: string[];
+  examSectionOptions: string[];
+  onFetchExamsForSection: (classCode: string, sectionName?: string) => Promise<MockExamItem[]>;
+  compareExamIds: [number, number] | null;
+  compareResults: { exam1: MockExamResultItem[]; exam2: MockExamResultItem[] } | null;
+  compareLoading: boolean;
+  onCompare: (id1: number, id2: number, cls: string, sec: string) => void;
+  onExitCompare: () => void;
+  teacherUsername: string;
+}
+
+const SummerComparisonChart: React.FC = () => {
+  const [subject, setSubject] = useState<'maths' | 'science'>('maths');
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: C.shadow, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Before vs After Summer — Section-wise
+        </span>
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          {(['maths', 'science'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setSubject(s)}
+              style={{
+                padding: '4px 14px', borderRadius: 99,
+                border: `1.5px solid ${subject === s ? C.purple : C.border}`,
+                background: subject === s ? C.purpleSoft : C.card,
+                color: subject === s ? C.purple : C.textMuted,
+                fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, textTransform: 'capitalize',
+              }}
+            >
+              {s === 'maths' ? 'Math' : 'Science'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
+        Class 10 sections · average score, April (before summer) vs June (after summer)
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <div style={{ width: Math.max(sectionSummerComparison.sections.length * 90, 700), height: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={sectionSummerComparison.sections.map(s => ({
+                section: s.section,
+                before: s[subject].before,
+                beforeN: s[subject].beforeN,
+                after: s[subject].after,
+                afterN: s[subject].afterN,
+              }))}
+              margin={{ top: 20, right: 16, left: 0, bottom: 8 }}
+              barGap={4}
+              barCategoryGap="30%"
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+              <XAxis dataKey="section" tick={{ fontSize: 12, fontFamily: FONT, fill: C.textMuted }} tickLine={false} axisLine={{ stroke: C.border }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fontFamily: FONT, fill: C.textMuted }} tickLine={false} axisLine={false} tickFormatter={v => `${v}%`} width={36} />
+              <Tooltip
+                contentStyle={{ fontFamily: FONT, fontSize: 12, borderRadius: 8, border: `1px solid ${C.border}` }}
+                formatter={(value: any, name: any, props: any) => {
+                  const n = name === 'before' ? props.payload.beforeN : props.payload.afterN;
+                  return [value !== null ? `${Number(value).toFixed(1)}% (n=${n})` : '—', name === 'before' ? 'Before Summer' : 'After Summer'];
+                }}
+              />
+              <Bar dataKey="before" fill={C.blue} radius={[4, 4, 0, 0]} barSize={28}>
+                <LabelList dataKey="before" position="top" style={{ fontSize: 10, fontWeight: 700, fontFamily: FONT, fill: C.blue }} formatter={(v: any) => v !== null ? Math.round(Number(v)) : ''} />
+              </Bar>
+              <Bar dataKey="after" fill={C.purple} radius={[4, 4, 0, 0]} barSize={28}>
+                <LabelList dataKey="after" position="top" style={{ fontSize: 10, fontWeight: 700, fontFamily: FONT, fill: C.purple }} formatter={(v: any) => v !== null ? Math.round(Number(v)) : ''} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 16, marginTop: 8, justifyContent: 'center' }}>
+        {[{ label: 'Before Summer (Apr)', color: C.blue }, { label: 'After Summer (Jun)', color: C.purple }].map(l => (
+          <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.textSecondary }}>
+            <div style={{ width: 10, height: 10, borderRadius: 3, background: l.color }} />
+            {l.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const score = (v: number | null) => v === null ? '—' : String(Math.round(v * 10) / 10);
+const pct = (v: number | null) => v === null ? '—' : `${Math.round(v * 10) / 10}%`;
+
+const formatDuration = (totalSeconds: number | null) => {
+  if (totalSeconds === null) return '—';
+  const totalMinutes = Math.round(totalSeconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+};
+
+const fmtActivityTime = (sec: number) => {
+  if (sec <= 0) return '—';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${Math.floor(sec % 60)}s`;
+};
+
+const activityCalColor = (timeSec: number) => {
+  if (timeSec <= 0)   return '#E2E8F0';
+  if (timeSec < 300)  return 'rgba(124,58,237,0.25)';
+  if (timeSec < 1800) return 'rgba(124,58,237,0.60)';
+  return C.purple;
+};
+
+interface StudentActivityModalStudent {
+  name: string;
+  username: string | null;
+  rollNumber: string | null;
+  section: string;
+}
+
+const StudentActivityModal: React.FC<{ student: StudentActivityModalStudent; onClose: () => void }> = ({ student, onClose }) => {
+  const [loginLogs, setLoginLogs] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!student.username) {
+      setLoading(false);
+      setError('No username on record for this student — activity cannot be looked up.');
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    dashboardAPI.getUserLoginLogs(student.username, 500)
+      .then(logs => { if (!cancelled) setLoginLogs(logs); })
+      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to load activity.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [student.username]);
+
+  const days: any[] = loginLogs?.items ?? [];
+  const recentDays = [...days].sort((a, b) => a.date.localeCompare(b.date)).slice(-60);
+  const daysActive = days.filter((d: any) => Number(d.total_time_seconds) > 60).length;
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: FONT }}>
+      <style>{`@keyframes dot-pulse{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}`}</style>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: C.shadowLg, border: `1px solid ${C.border}` }}>
+        <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{student.name}</div>
+            <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+              {`Sec ${student.section}`}{student.rollNumber ? ` · Roll ${student.rollNumber}` : ''}
+              {student.username && <span style={{ marginLeft: 8, color: C.purple, fontWeight: 600 }}>@{student.username}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, padding: 4, display: 'flex' }}>
+            <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: '48px 0', display: 'flex', justifyContent: 'center', gap: 8 }}>
+            {[0, 1, 2].map(i => <div key={i} style={{ width: 9, height: 9, borderRadius: '50%', background: C.purple, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />)}
+          </div>
+        ) : error ? (
+          <div style={{ padding: '24px 22px', fontSize: 13, color: '#DC2626' }}>{error}</div>
+        ) : (
+          <>
+            <div style={{ padding: '16px 22px', borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+                In-App Activity (all-time)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                {[
+                  { label: 'Days Active', value: String(daysActive) },
+                  { label: 'Sessions', value: String(loginLogs?.total_sessions ?? 0) },
+                  { label: 'Total Time on App', value: fmtActivityTime(loginLogs?.total_time_seconds ?? 0) },
+                  { label: 'Total Days Logged', value: String(loginLogs?.total_days ?? 0) },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ background: C.cardAlt, borderRadius: 10, padding: '10px 14px', border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 10, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {recentDays.length > 0 && (
+              <div style={{ padding: '16px 22px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                    Login Activity — last {recentDays.length} days
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: C.textMuted }}>
+                    <span>Less</span>
+                    {[0, 60, 300, 1800].map(t => (
+                      <div key={t} style={{ width: 10, height: 10, borderRadius: 2, background: activityCalColor(t > 0 ? t + 1 : 0) }} />
+                    ))}
+                    <span>More</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                  {recentDays.map((d: any) => {
+                    const timeSec = Number(d.total_time_seconds ?? 0);
+                    const tip = timeSec > 0 ? `${d.date}: ${fmtActivityTime(timeSec)}` : d.date;
+                    return <div key={d.date} title={tip} style={{ width: 14, height: 14, borderRadius: 3, background: activityCalColor(timeSec), flexShrink: 0 }} />;
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+interface SummerComparisonTableProps {
+  teacherUsername: string;
+  examClassOptions: string[];
+  examSectionOptions: string[];
+}
+
+const SummerComparisonTable: React.FC<SummerComparisonTableProps> = ({ teacherUsername, examSectionOptions }) => {
+  const sectionChoices = examSectionOptions.filter(o => o !== 'All');
+
+  const classFilter = '10';
+  const [sectionFilter, setSectionFilter] = useState('All');
+  const [view, setView] = useState<'summary' | 'students'>('summary');
+  const [data, setData] = useState<SummerComparisonData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [showHours, setShowHours] = useState(false);
+  const [hoursMap, setHoursMap] = useState<Record<string, number | null>>({});
+  const [hoursLoading, setHoursLoading] = useState(false);
+  const [activityStudent, setActivityStudent] = useState<SummerStudentRow | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+
+  const handleRefresh = () => setRefreshToken(t => t + 1);
+
+  // Auto-refresh every 4 hours if user hasn't manually refreshed
+  useEffect(() => {
+    const FOUR_HOURS = 4 * 60 * 60 * 1000;
+    const timer = setInterval(() => setRefreshToken(t => t + 1), FOUR_HOURS);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadSummerComparisonExcel(teacherUsername, classFilter, sectionFilter);
+    } catch (err: any) {
+      setDownloadError(err?.message || 'Failed to generate the Excel file. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getSummerComparisonData(teacherUsername, classFilter, 'All', refreshToken > 0)
+      .then(d => { if (!cancelled) { setData(d); setLastRefreshed(new Date()); } })
+      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to load comparison data.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [teacherUsername, classFilter, refreshToken]);
+
+  useEffect(() => {
+    if (!showHours || !data) return;
+    const usernames = Array.from(new Set(
+      data.allStudents.map(s => s.username).filter((u): u is string => !!u && hoursMap[u] === undefined)
+    ));
+    if (usernames.length === 0) return;
+
+    let cancelled = false;
+    setHoursLoading(true);
+    const CHUNK_SIZE = 6;
+    (async () => {
+      const results: Record<string, number | null> = {};
+      for (let i = 0; i < usernames.length && !cancelled; i += CHUNK_SIZE) {
+        const chunk = usernames.slice(i, i + CHUNK_SIZE);
+        const settled = await Promise.allSettled(chunk.map(u => dashboardAPI.getUserLoginLogs(u, 500)));
+        settled.forEach((res, idx) => {
+          if (res.status === 'fulfilled') {
+            results[chunk[idx]] = res.value.total_time_seconds;
+          } else {
+            console.error(`getUserLoginLogs failed for username "${chunk[idx]}":`, res.reason);
+            results[chunk[idx]] = null;
+          }
+        });
+      }
+      if (!cancelled) {
+        setHoursMap(prev => ({ ...prev, ...results }));
+        setHoursLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showHours, data]);
+
+  const selectStyle = { padding: '7px 12px', borderRadius: 10, border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontWeight: 600, fontFamily: FONT, cursor: 'pointer', minWidth: 90 };
+  const thStyle: React.CSSProperties = { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#FFFFFF', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.03em' };
+  const tdStyle: React.CSSProperties = { padding: '8px 10px', fontSize: 13, color: C.text, textAlign: 'center', borderBottom: `1px solid ${C.border}` };
+
+  const classLabel = `Class ${classFilter}`;
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: C.shadow, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+            background: `linear-gradient(135deg, ${C.purple}, ${C.blue})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 4px 10px -2px ${C.purple}66`,
+          }}>
+            <svg width="18" height="18" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M3 3v18h18M7 14l4-4 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <span style={{
+            fontSize: 15, fontWeight: 800, letterSpacing: '0.01em',
+            background: `linear-gradient(90deg, ${C.purple}, ${C.blue})`,
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+          }}>
+            {classLabel} — Summer Diagnostic
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 3, background: C.cardAlt, padding: 4, borderRadius: 99, border: `1.5px solid ${C.border}` }}>
+          {([
+            { key: 'summary' as const, label: 'Summary', icon: 'M3 13h4v8H3v-8Zm7-6h4v14h-4V7Zm7-4h4v18h-4V3Z' },
+            { key: 'students' as const, label: 'Student Data', icon: 'M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3ZM8 11c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h10v-2.5c0-2.33-4.67-3.5-7-3.5Zm8 0c-.29 0-.62.02-.97.05.97.7 1.97 1.85 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z' },
+          ]).map(({ key, label, icon }) => {
+            const active = view === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setView(key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '8px 18px', borderRadius: 99, border: 'none',
+                  background: active ? `linear-gradient(135deg, ${C.purple}, ${C.blue})` : 'transparent',
+                  color: active ? '#FFFFFF' : C.textMuted,
+                  fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                  boxShadow: active ? `0 4px 14px -3px ${C.purple}90` : 'none',
+                  transform: active ? 'scale(1.04)' : 'scale(1)',
+                  transition: 'all 0.18s ease',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d={icon} /></svg>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto', background: C.cardAlt, padding: '6px 12px', borderRadius: 12, border: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Section</span>
+            <select value={sectionFilter} onChange={e => setSectionFilter(e.target.value)} style={selectStyle}>
+              <option value="All">All</option>
+              {sectionChoices.map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {view === 'students' && (
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+            padding: '8px 14px', borderRadius: 12,
+            border: `1.5px solid ${showHours ? C.purple : C.border}`,
+            background: showHours ? `linear-gradient(135deg, ${C.purpleSoft}, ${C.card})` : C.cardAlt,
+            color: showHours ? C.purple : C.textMuted,
+            boxShadow: showHours ? `0 2px 8px -3px ${C.purple}55` : 'none',
+            transition: 'all 0.15s',
+          }}>
+            <input
+              type="checkbox"
+              checked={showHours}
+              onChange={e => setShowHours(e.target.checked)}
+              style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer' }}
+            />
+            ⏱ Show total hours of student
+            {showHours && hoursLoading && (
+              <span style={{ display: 'inline-flex', gap: 3 }}>
+                {[0, 1, 2].map(i => (
+                  <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: C.purple, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite`, display: 'inline-block' }} />
+                ))}
+              </span>
+            )}
+          </label>
+        )}
+
+        <button
+          onClick={handleRefresh}
+          disabled={loading}
+          title="Force refresh data"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '9px 14px', borderRadius: 12, border: `1.5px solid ${C.border}`,
+            background: C.card, color: C.textMuted,
+            fontSize: 12.5, fontWeight: 700, fontFamily: FONT,
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"
+            style={{ transform: loading ? 'rotate(360deg)' : 'none', transition: loading ? 'transform 0.8s linear' : 'none' }}>
+            <path d="M23 4v6h-6M1 20v-6h6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.13 4.36A9 9 0 0020.49 15" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Refresh
+        </button>
+
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '9px 18px', borderRadius: 12, border: 'none',
+            background: downloading ? C.purpleSoft : `linear-gradient(135deg, ${C.purple}, ${C.blue})`,
+            color: downloading ? C.purple : '#FFFFFF',
+            fontSize: 12.5, fontWeight: 700, fontFamily: FONT,
+            cursor: downloading ? 'not-allowed' : 'pointer',
+            boxShadow: downloading ? 'none' : `0 3px 10px -2px ${C.purple}66`,
+          }}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {downloading ? 'Generating…' : 'Download Report'}
+        </button>
+      </div>
+      <style>{`@keyframes dot-pulse{0%,80%,100%{transform:scale(0.6);opacity:0.4}40%{transform:scale(1);opacity:1}}`}</style>
+      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
+        {view === 'summary'
+          ? 'April diagnostic vs June re-test · Averages and % Gain are calculated only for students with both scores.'
+          : 'April diagnostic vs June re-test · Student-by-student Maths & Science scores. Click a row to view that student\'s activity.'}
+        {lastRefreshed && <span style={{ marginLeft: 12 }}>· Last refreshed: {lastRefreshed.toLocaleTimeString()}</span>}
+        {downloadError && <span style={{ color: '#DC2626', marginLeft: 8 }}>{downloadError}</span>}
+      </div>
+
+      {loading && <div style={{ fontSize: 13, color: C.textMuted, padding: '12px 0' }}>Loading comparison data…</div>}
+      {error && <div style={{ fontSize: 13, color: '#DC2626', padding: '12px 0' }}>{error}</div>}
+
+      {!loading && !error && data && (() => {
+        const filteredSections = sectionFilter === 'All' ? data.sections : data.sections.filter(s => s === sectionFilter);
+        const filteredBySection: typeof data.bySection = {};
+        for (const s of filteredSections) filteredBySection[s] = data.bySection[s];
+        const filteredStudents = sectionFilter === 'All' ? data.allStudents : data.allStudents.filter(s => s.section === sectionFilter);
+        return (
+        filteredSections.length === 0 ? (
+          <div style={{ fontSize: 13, color: C.textMuted, padding: '12px 0' }}>No matching Maths/Science results found for April or June with the selected filters.</div>
+        ) : view === 'summary' ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: 600 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thStyle, background: C.purple, textAlign: 'left' }}>Section</th>
+                  <th style={{ ...thStyle, background: C.purple }}>Students</th>
+                  <th style={{ ...thStyle, background: C.blue }} colSpan={3}>Maths</th>
+                  <th style={{ ...thStyle, background: C.purple }} colSpan={3}>Science</th>
+                </tr>
+                <tr>
+                  <th style={{ ...thStyle, background: C.purpleSoft, color: C.purple }} />
+                  <th style={{ ...thStyle, background: C.purpleSoft, color: C.purple }} />
+                  {['Before', 'After', '% Gain', 'Before', 'After', '% Gain'].map((h, i) => (
+                    <th key={i} style={{ ...thStyle, background: C.purpleSoft, color: C.purple }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSections.map(section => {
+                  const rows = filteredBySection[section];
+                  const maths = subjectStats(rows, 'maths');
+                  const science = subjectStats(rows, 'science');
+                  return (
+                    <tr key={section}>
+                      <td style={{ ...tdStyle, textAlign: 'left', fontWeight: 600 }}>Sec {section}</td>
+                      <td style={tdStyle}>{rows.length}</td>
+                      <td style={tdStyle}>{score(maths.avgBefore)}</td>
+                      <td style={tdStyle}>{score(maths.avgAfter)}</td>
+                      <td style={tdStyle}>{pct(maths.gain)}</td>
+                      <td style={tdStyle}>{score(science.avgBefore)}</td>
+                      <td style={tdStyle}>{score(science.avgAfter)}</td>
+                      <td style={tdStyle}>{pct(science.gain)}</td>
+                    </tr>
+                  );
+                })}
+                {(() => {
+                  const allMaths = subjectStats(filteredStudents, 'maths');
+                  const allScience = subjectStats(filteredStudents, 'science');
+                  return (
+                    <tr style={{ background: C.purpleSoft, fontWeight: 700 }}>
+                      <td style={{ ...tdStyle, textAlign: 'left', borderBottom: 'none' }}>{classLabel.toUpperCase()} — ALL</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{filteredStudents.length}</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{score(allMaths.avgBefore)}</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{score(allMaths.avgAfter)}</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{pct(allMaths.gain)}</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{score(allScience.avgBefore)}</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{score(allScience.avgAfter)}</td>
+                      <td style={{ ...tdStyle, borderBottom: 'none' }}>{pct(allScience.gain)}</td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, minWidth: showHours ? 800 : 700 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thStyle, background: C.purple }}>S.No</th>
+                  <th style={{ ...thStyle, background: C.purple, textAlign: 'left' }}>Section</th>
+                  <th style={{ ...thStyle, background: C.purple, textAlign: 'left' }}>Student Name</th>
+                  <th style={{ ...thStyle, background: C.blue }} colSpan={3}>Maths</th>
+                  <th style={{ ...thStyle, background: C.purple }} colSpan={3}>Science</th>
+                  {showHours && <th style={{ ...thStyle, background: C.purple }}>Total Hours</th>}
+                </tr>
+                <tr>
+                  <th style={{ ...thStyle, background: C.purpleSoft, color: C.purple }} />
+                  <th style={{ ...thStyle, background: C.purpleSoft, color: C.purple }} />
+                  <th style={{ ...thStyle, background: C.purpleSoft, color: C.purple }} />
+                  {['Before', 'After', '% Gain', 'Before', 'After', '% Gain'].map((h, i) => (
+                    <th key={i} style={{ ...thStyle, background: C.purpleSoft, color: C.purple }}>{h}</th>
+                  ))}
+                  {showHours && <th style={{ ...thStyle, background: C.purpleSoft, color: C.purple }} />}
+                </tr>
+              </thead>
+              <tbody>
+                {(() => { let sNo = 0; return filteredSections.flatMap(section => {
+                  const sorted = [...filteredBySection[section]].sort(
+                    (a, b) => (Number(a.rollNumber) || 0) - (Number(b.rollNumber) || 0) || a.name.localeCompare(b.name)
+                  );
+                  return sorted.map(s => {
+                    sNo += 1;
+                    const mathsGain = s.maths.before !== null && s.maths.after !== null && s.maths.before !== 0 ? ((s.maths.after - s.maths.before) / s.maths.before) * 100 : null;
+                    const scienceGain = s.science.before !== null && s.science.after !== null && s.science.before !== 0 ? ((s.science.after - s.science.before) / s.science.before) * 100 : null;
+                    const hoursSecs = s.username ? hoursMap[s.username] : null;
+                    return (
+                      <tr
+                        key={`${section}-${s.rollNumber}-${s.name}`}
+                        onClick={() => setActivityStudent(s)}
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = C.purpleSoft; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+                      >
+                        <td style={tdStyle}>{sNo}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left' }}>Sec {section}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left' }}>{s.name}</td>
+                        <td style={tdStyle}>{score(s.maths.before)}</td>
+                        <td style={tdStyle}>{score(s.maths.after)}</td>
+                        <td style={tdStyle}>{pct(mathsGain)}</td>
+                        <td style={tdStyle}>{score(s.science.before)}</td>
+                        <td style={tdStyle}>{score(s.science.after)}</td>
+                        <td style={tdStyle}>{pct(scienceGain)}</td>
+                        {showHours && (
+                          <td style={tdStyle}>
+                            {!s.username ? '—' : hoursSecs === undefined ? '…' : formatDuration(hoursSecs)}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  });
+                }); })()}
+              </tbody>
+            </table>
+          </div>
+        )
+        );
+      })()}
+
+      {activityStudent && (
+        <StudentActivityModal student={activityStudent} onClose={() => setActivityStudent(null)} />
+      )}
+    </div>
+  );
+};
+
+export const CompareMockExams: React.FC<CompareMockExamsProps> = ({
+  exams, examClassOptions, examSectionOptions, onFetchExamsForSection,
+  compareExamIds, compareResults, compareLoading, onCompare, onExitCompare, teacherUsername,
+}) => {
+  const [resetKey, setResetKey] = useState(0);
+  const [modalCls, setModalCls] = useState('');
+  const [modalSec, setModalSec] = useState('');
+
+  if (compareExamIds) {
+    return (
+      <div>
+        <SummerComparisonChart />
+        <SummerComparisonTable teacherUsername={teacherUsername} examClassOptions={examClassOptions} examSectionOptions={examSectionOptions} />
+        <CompareView
+          exams={exams}
+          compareExamIds={compareExamIds}
+          compareResults={compareResults}
+          compareLoading={compareLoading}
+          compareClass={modalCls}
+          compareSection={modalSec}
+          onExit={() => { onExitCompare(); setResetKey(k => k + 1); }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <SummerComparisonChart />
+      <SummerComparisonTable teacherUsername={teacherUsername} examClassOptions={examClassOptions} examSectionOptions={examSectionOptions} />
+      <CompareModal
+        key={resetKey}
+        classOptions={examClassOptions}
+        sectionOptions={() => examSectionOptions}
+        onFetchExams={onFetchExamsForSection}
+        onConfirm={(id1, id2, cls, sec) => { setModalCls(cls); setModalSec(sec); onCompare(id1, id2, cls, sec); }}
+        onClose={() => setResetKey(k => k + 1)}
+      />
+    </div>
+  );
+};
+
 // ── Main component ──────────────────────────────────────────────────────────
 
 const MockExamResults: React.FC<MockExamResultsProps> = ({
@@ -1186,25 +1843,18 @@ const MockExamResults: React.FC<MockExamResultsProps> = ({
   examClassOptions, examSectionOptions, examClassFilter, examSectionFilter, onExamFiltersChange,
   selectedHomeworkId, onSelectExam,
   results, resultsLoading,
-  compareExamIds, compareResults, compareLoading, onCompare, onExitCompare,
   onFetchExamsForSection,
 }) => {
   const [classFilter, setCls]         = useState('All');
   const [secFilter, setSec]           = useState('All');
   const [dateFilter, setDateFilter]   = useState('');
-  const [showModal, setShowModal]     = useState(false);
-  const [modalCls, setModalCls]       = useState('');
-  const [modalSec, setModalSec]       = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
 
   useEffect(() => { setCls('All'); setSec('All'); }, [selectedHomeworkId]);
   useEffect(() => { setSec('All'); }, [classFilter]);
+  useEffect(() => { setSelectedMonth(null); setDateFilter(''); }, [examClassFilter, examSectionFilter]);
 
   if (loading) return <Dots />;
-
-  // Compare mode: show results
-  if (compareExamIds) {
-    return <CompareView exams={exams} compareExamIds={compareExamIds} compareResults={compareResults} compareLoading={compareLoading} compareClass={modalCls} compareSection={modalSec} onExit={onExitCompare} />;
-  }
 
   // Detail view: single exam results
   if (selectedHomeworkId) {
@@ -1299,60 +1949,149 @@ const MockExamResults: React.FC<MockExamResultsProps> = ({
     );
   }
 
-  // List view
-  const sectionOptsForModal = (cls: string) => {
-    if (!cls) return examSectionOptions;
-    return examSectionOptions; // will be overridden per class in modal via fetch
-  };
+  // List view — month picker
+  if (!selectedMonth) {
+    const monthMap = new Map<string, MockExamItem[]>();
+    for (const exam of exams) {
+      const key = exam.date_assigned ? exam.date_assigned.slice(0, 7) : 'unscheduled';
+      if (!monthMap.has(key)) monthMap.set(key, []);
+      monthMap.get(key)!.push(exam);
+    }
+    const months = Array.from(monthMap.keys()).sort();
 
-  return (
-    <>
-      {showModal && (
-        <CompareModal
-          classOptions={examClassOptions}
-          sectionOptions={sectionOptsForModal}
-          onFetchExams={onFetchExamsForSection}
-          onConfirm={(id1, id2, cls, sec) => { setModalCls(cls); setModalSec(sec); setShowModal(false); onCompare(id1, id2, cls, sec); }}
-          onClose={() => setShowModal(false)}
-        />
-      )}
-
+    return (
       <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow, fontFamily: FONT }}>
         <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, background: C.cardAlt, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Mock Exams</span>
           <span style={{ padding: '2px 8px', borderRadius: 99, background: C.purpleSoft, fontSize: 11, fontWeight: 700, color: C.purple }}>{exams.length}</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Class</span>
+              <select value={examClassFilter} onChange={e => onExamFiltersChange(e.target.value, 'All')} style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: 13, fontFamily: FONT, cursor: 'pointer', minWidth: 110 }}>
+                {examClassOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Section</span>
+              <select value={examSectionFilter} onChange={e => onExamFiltersChange(examClassFilter, e.target.value)} disabled={examClassFilter === 'All'} style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${C.border}`, background: examClassFilter === 'All' ? C.cardAlt : C.card, color: examClassFilter === 'All' ? C.textMuted : C.text, fontSize: 13, fontFamily: FONT, cursor: examClassFilter === 'All' ? 'not-allowed' : 'pointer', minWidth: 110 }}>
+                {examSectionOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
 
-          {/* Compare button */}
-          <button
-            onClick={() => setShowModal(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${C.purple}`, background: 'transparent', color: C.purple, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.background = C.purpleSoft; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Compare Exams
-          </button>
+        {months.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: 14 }}>No mock exams found.</div>
+        ) : (
+          <div style={{ padding: 22, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 18 }}>
+            {months.map(monthKey => {
+              const monthExams = monthMap.get(monthKey)!;
+              const isUnscheduled = monthKey === 'unscheduled';
+              const monthDate = isUnscheduled ? null : new Date(monthKey + '-01T00:00:00');
+              const monthName = monthDate ? monthDate.toLocaleDateString('en-GB', { month: 'long' }) : 'Unscheduled';
+              const yearLabel = monthDate ? monthDate.getFullYear() : '';
+              const totalSubs = monthExams.reduce((s, e) => s + (e.total_submissions || 0), 0);
+              const scoredExams = monthExams.filter(e => e.average_score != null);
+              const avgScore = scoredExams.length
+                ? scoredExams.reduce((s, e) => s + Number(e.average_score), 0) / scoredExams.length
+                : null;
+              const palette = [
+                { grad: 'linear-gradient(135deg, #7C3AED, #A78BFA)', soft: C.purpleSoft, text: C.purpleDark },
+                { grad: 'linear-gradient(135deg, #0EA5E9, #38BDF8)', soft: 'rgba(14,165,233,0.10)', text: '#0369A1' },
+                { grad: 'linear-gradient(135deg, #10B981, #34D399)', soft: C.greenSoft, text: '#047857' },
+                { grad: 'linear-gradient(135deg, #F59E0B, #FBBF24)', soft: C.amberSoft, text: '#B45309' },
+              ];
+              const colors = isUnscheduled ? { grad: 'linear-gradient(135deg, #94A3B8, #CBD5E1)', soft: C.cardAlt, text: C.textSecondary } : palette[months.indexOf(monthKey) % palette.length];
+              return (
+                <button
+                  key={monthKey}
+                  onClick={() => setSelectedMonth(monthKey)}
+                  style={{
+                    textAlign: 'left', borderRadius: 16, border: 'none', cursor: 'pointer',
+                    fontFamily: FONT, overflow: 'hidden', background: C.card,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+                    transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.12)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)'; }}
+                >
+                  <div style={{ background: colors.grad, padding: '20px 18px', position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ position: 'absolute', top: -20, right: -20, width: 90, height: 90, borderRadius: '50%', background: 'rgba(255,255,255,0.14)' }} />
+                    <div style={{ position: 'absolute', bottom: -30, right: 10, width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.10)' }} />
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>📅</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>{monthName}</div>
+                    {yearLabel && <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{yearLabel}</div>}
+                  </div>
+                  <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>Exams</span>
+                      <span style={{ padding: '2px 9px', borderRadius: 99, background: colors.soft, color: colors.text, fontSize: 12, fontWeight: 700 }}>{monthExams.length}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>Submissions</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{totalSubs}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: C.textMuted }}>Avg Score</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: avgScore != null ? scoreColor(avgScore) : C.textMuted }}>
+                        {avgScore != null ? `${avgScore.toFixed(1)}%` : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // List view — exams within the selected month
+  const monthLabel = selectedMonth === 'unscheduled'
+    ? 'Unscheduled'
+    : new Date(selectedMonth + '-01T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const monthExams = exams.filter(e => (e.date_assigned ? e.date_assigned.slice(0, 7) : 'unscheduled') === selectedMonth);
+
+  return (
+    <>
+      <BackBtn onClick={() => { setSelectedMonth(null); setDateFilter(''); }} label="Back to Months" />
+      <div style={{ background: C.card, borderRadius: 14, border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow, fontFamily: FONT }}>
+        <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 12, background: C.cardAlt, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{monthLabel}</span>
+          <span style={{ padding: '2px 8px', borderRadius: 99, background: C.purpleSoft, fontSize: 11, fontWeight: 700, color: C.purple }}>{monthExams.length}</span>
 
           {/* Date filter — centred */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</span>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="date"
-                  value={dateFilter}
-                  onChange={e => setDateFilter(e.target.value)}
-                  style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${dateFilter ? C.purple : C.border}`, background: C.card, color: dateFilter ? C.text : C.textMuted, fontSize: 13, fontFamily: FONT, cursor: 'pointer', minWidth: 140, outline: 'none' }}
-                />
-                {dateFilter && (
+              {dateFilter && (
+                <button
+                  onClick={() => setDateFilter(shiftDate(dateFilter, -1))}
+                  title="Previous day"
+                  style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.card, color: C.textSecondary, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
+                >‹</button>
+              )}
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${dateFilter ? C.purple : C.border}`, background: C.card, color: dateFilter ? C.text : C.textMuted, fontSize: 13, fontFamily: FONT, cursor: 'pointer', minWidth: 140, outline: 'none' }}
+              />
+              {dateFilter && (
+                <>
+                  <button
+                    onClick={() => setDateFilter(shiftDate(dateFilter, 1))}
+                    title="Next day"
+                    style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, border: `1.5px solid ${C.border}`, background: C.card, color: C.textSecondary, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
+                  >›</button>
                   <button
                     onClick={() => setDateFilter('')}
-                    style={{ position: 'absolute', right: 8, background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, fontSize: 14, lineHeight: 1, padding: 0 }}
+                    title="Clear date"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted, fontSize: 16, lineHeight: 1, padding: 0 }}
                   >×</button>
-                )}
-              </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -1374,8 +2113,8 @@ const MockExamResults: React.FC<MockExamResultsProps> = ({
 
         {(() => {
           const visibleExams = dateFilter
-            ? exams.filter(e => e.date_assigned && e.date_assigned.slice(0, 10) === dateFilter)
-            : exams;
+            ? monthExams.filter(e => e.date_assigned && e.date_assigned.slice(0, 10) === dateFilter)
+            : monthExams;
           return visibleExams.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: 14 }}>
             {dateFilter ? `No mock exams assigned on ${new Date(dateFilter + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}.` : 'No mock exams found.'}
@@ -1384,7 +2123,7 @@ const MockExamResults: React.FC<MockExamResultsProps> = ({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.cardAlt }}>
-                {['Title', 'Code', 'Chapters', 'Assigned', 'Due', 'Submissions', 'Avg Score'].map(h => (
+                {['Title', 'Code', 'Chapters', 'Submissions', 'Avg Score'].map(h => (
                   <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -1413,8 +2152,6 @@ const MockExamResults: React.FC<MockExamResultsProps> = ({
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '11px 16px', color: C.textSecondary, fontSize: 12 }}>{fmt(exam.date_assigned)}</td>
-                  <td style={{ padding: '11px 16px', color: C.textSecondary, fontSize: 12 }}>{fmt(exam.due_date)}</td>
                   <td style={{ padding: '11px 16px', fontWeight: 700, color: C.purple }}>{exam.total_submissions}</td>
                   <td style={{ padding: '11px 16px' }}>
                     {exam.average_score == null

@@ -396,6 +396,158 @@ export function computeSectionSubjectAverages(
     .sort((a, b) => String(a.section).localeCompare(String(b.section)));
 }
 
+// ─── Unique students appeared (deduped, not submission counts) ───────────────
+
+export interface AppearedCount {
+  key: string;
+  count: number;
+}
+
+export interface AppearedSummary {
+  totalUnique: number;
+  bySubject: AppearedCount[];
+  byClass: AppearedCount[];
+  byClassSubject: { className: string; subject: string; count: number }[];
+}
+
+export function computeStudentsAppeared(
+  exams: MockExamItem[],
+  resultsMap: Map<number, MockExamResultItem[]>,
+): AppearedSummary {
+  const overall = new Set<string>();
+  const subjectSets = new Map<string, Set<string>>();
+  const classSets = new Map<string, Set<string>>();
+  const classSubjectSets = new Map<string, Set<string>>();
+
+  for (const exam of exams) {
+    const results = resultsMap.get(exam.homework_id);
+    if (!results?.length) continue;
+    const subject = inferSubject(exam);
+
+    for (const r of results) {
+      const studentKey = r.username || String(r.student_id);
+      const className = r.class_name ?? 'Unknown';
+      const classSubjectKey = `${className}||${subject}`;
+
+      overall.add(studentKey);
+      if (!subjectSets.has(subject)) subjectSets.set(subject, new Set());
+      subjectSets.get(subject)!.add(studentKey);
+      if (!classSets.has(className)) classSets.set(className, new Set());
+      classSets.get(className)!.add(studentKey);
+      if (!classSubjectSets.has(classSubjectKey)) classSubjectSets.set(classSubjectKey, new Set());
+      classSubjectSets.get(classSubjectKey)!.add(studentKey);
+    }
+  }
+
+  const bySubject = Array.from(subjectSets.entries())
+    .map(([key, set]) => ({ key, count: set.size }))
+    .sort((a, b) => b.count - a.count);
+
+  const byClass = Array.from(classSets.entries())
+    .map(([key, set]) => ({ key, count: set.size }))
+    .sort((a, b) => {
+      const na = parseInt(a.key, 10), nb = parseInt(b.key, 10);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+      return a.key.localeCompare(b.key);
+    });
+
+  const byClassSubject = Array.from(classSubjectSets.entries())
+    .map(([combinedKey, set]) => {
+      const [className, subject] = combinedKey.split('||');
+      return { className, subject, count: set.size };
+    })
+    .sort((a, b) => a.className.localeCompare(b.className) || a.subject.localeCompare(b.subject));
+
+  return { totalUnique: overall.size, bySubject, byClass, byClassSubject };
+}
+
+// ─── Never-appeared roster cross-reference ────────────────────────────────────
+
+export interface RosterStudent {
+  student_id: number;
+  full_name: string;
+  grade?: string | null;
+  section?: string | null;
+}
+
+export function normalizeClassLabel(value?: string | null): string {
+  if (!value) return 'Unknown';
+  const trimmed = String(value).trim();
+  const numberMatch = trimmed.match(/\d+/);
+  return numberMatch ? numberMatch[0] : trimmed.replace(/^class\s+/i, '') || 'Unknown';
+}
+
+export function normalizeSectionLabel(value?: string | null): string {
+  if (!value) return 'Unknown';
+  return String(value).trim().replace(/^section\s+/i, '') || 'Unknown';
+}
+
+export interface NeverAppearedStudent {
+  studentId: number;
+  name: string;
+  className: string;
+  section: string;
+}
+
+export interface NeverAppearedSummary {
+  total: number;
+  consideredTotal: number; // roster size within classes/sections where exams were actually conducted
+  students: NeverAppearedStudent[];
+  byClass: AppearedCount[];
+}
+
+export function computeNeverAppeared(
+  roster: RosterStudent[],
+  exams: MockExamItem[],
+  resultsMap: Map<number, MockExamResultItem[]>,
+): NeverAppearedSummary {
+  // Only consider class+section combos where a mock exam was actually conducted
+  // (i.e. at least one result row exists for that combo) — e.g. if exams only
+  // ran for classes 10 & 12, classes 6-9 are out of scope; if class 10's "PFA"
+  // section never had an exam, those students are out of scope too.
+  const conductedSections = new Map<string, Set<string>>();
+  const appearedIds = new Set<number>();
+  for (const exam of exams) {
+    const results = resultsMap.get(exam.homework_id);
+    if (!results) continue;
+    for (const r of results) {
+      appearedIds.add(r.student_id);
+      const className = normalizeClassLabel(r.class_name);
+      const section = normalizeSectionLabel(r.section_name).toUpperCase();
+      if (!conductedSections.has(className)) conductedSections.set(className, new Set());
+      conductedSections.get(className)!.add(section);
+    }
+  }
+
+  const inScopeRoster = roster.filter(s => {
+    const className = normalizeClassLabel(s.grade);
+    const section = normalizeSectionLabel(s.section).toUpperCase();
+    return conductedSections.get(className)?.has(section) ?? false;
+  });
+
+  const students = inScopeRoster
+    .filter(s => !appearedIds.has(s.student_id))
+    .map(s => ({
+      studentId: s.student_id,
+      name: s.full_name,
+      className: normalizeClassLabel(s.grade),
+      section: s.section?.trim() || 'Unknown',
+    }))
+    .sort((a, b) => a.className.localeCompare(b.className) || a.section.localeCompare(b.section) || a.name.localeCompare(b.name));
+
+  const classMap = new Map<string, number>();
+  for (const s of students) classMap.set(s.className, (classMap.get(s.className) ?? 0) + 1);
+  const byClass = Array.from(classMap.entries())
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => {
+      const na = parseInt(a.key, 10), nb = parseInt(b.key, 10);
+      if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+      return a.key.localeCompare(b.key);
+    });
+
+  return { total: students.length, consideredTotal: inScopeRoster.length, students, byClass };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 export function scorePct(r: MockExamResultItem): number {

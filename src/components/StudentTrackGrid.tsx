@@ -522,47 +522,43 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
       {/* ── Filter bar: Class + Section + Topic ── */}
       <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, padding: '14px 18px', marginBottom: '16px', boxShadow: C.shadow, display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-end' }}>
 
-        {/* Class pills */}
+        {/* Class dropdown */}
         <div>
           <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Class</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {classOptions.map(cls => (
-              <button
-                key={cls}
-                onClick={() => { setClassFilter(cls); setSectionFilter('All'); setSelectedBarStatus(null); }}
-                style={{
-                  padding: '5px 13px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
-                  border: classFilter === cls ? `1.5px solid ${C.blue}` : `1.5px solid ${C.border}`,
-                  background: classFilter === cls ? C.blueSoft : 'transparent',
-                  color: classFilter === cls ? C.blue : C.textSecondary,
-                  fontSize: '12px', fontWeight: classFilter === cls ? 700 : 500,
-                  transition: 'all 0.15s',
-                }}
-              >{cls}</button>
-            ))}
-          </div>
+          <select
+            value={classFilter}
+            onChange={e => { setClassFilter(e.target.value); setSectionFilter('All'); setSelectedBarStatus(null); }}
+            style={{
+              padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
+              border: classFilter !== 'All' ? `1.5px solid ${C.blue}` : `1.5px solid ${C.border}`,
+              background: classFilter !== 'All' ? C.blueSoft : C.cardAlt,
+              color: classFilter !== 'All' ? C.blue : C.textSecondary,
+              fontSize: '13px', fontWeight: classFilter !== 'All' ? 700 : 500,
+              outline: 'none', minWidth: '110px',
+            }}
+          >
+            {classOptions.map(cls => <option key={cls} value={cls}>{cls === 'All' ? 'All classes' : cls}</option>)}
+          </select>
         </div>
 
-        {/* Section pills */}
+        {/* Section dropdown */}
         {sectionOptions.length > 1 && (
           <div>
             <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Section</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {sectionOptions.map(sec => (
-                <button
-                  key={sec}
-                  onClick={() => { setSectionFilter(sec); setSelectedBarStatus(null); }}
-                  style={{
-                    padding: '5px 13px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
-                    border: sectionFilter === sec ? `1.5px solid ${C.teal}` : `1.5px solid ${C.border}`,
-                    background: sectionFilter === sec ? C.tealSoft : 'transparent',
-                    color: sectionFilter === sec ? C.teal : C.textSecondary,
-                    fontSize: '12px', fontWeight: sectionFilter === sec ? 700 : 500,
-                    transition: 'all 0.15s',
-                  }}
-                >{sec}</button>
-              ))}
-            </div>
+            <select
+              value={sectionFilter}
+              onChange={e => { setSectionFilter(e.target.value); setSelectedBarStatus(null); }}
+              style={{
+                padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', fontFamily: FONT,
+                border: sectionFilter !== 'All' ? `1.5px solid ${C.teal}` : `1.5px solid ${C.border}`,
+                background: sectionFilter !== 'All' ? C.tealSoft : C.cardAlt,
+                color: sectionFilter !== 'All' ? C.teal : C.textSecondary,
+                fontSize: '13px', fontWeight: sectionFilter !== 'All' ? 700 : 500,
+                outline: 'none', minWidth: '110px',
+              }}
+            >
+              {sectionOptions.map(sec => <option key={sec} value={sec}>{sec === 'All' ? 'All sections' : sec}</option>)}
+            </select>
           </div>
         )}
 
@@ -627,9 +623,10 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
         )}
       </div>
 
-      {/* ── Bar Charts row ── */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
-      <div style={{ flex: 1, background: C.card, borderRadius: '16px', border: `1px solid ${C.border}`, padding: '20px 24px 16px', boxShadow: C.shadowLg }}>
+      {/* ── Bar Chart — only once class, section, and topic are all selected ── */}
+      {classFilter !== 'All' && sectionFilter !== 'All' && selectedTopic !== 'All' && (
+      <div style={{ marginBottom: '20px' }}>
+      <div style={{ background: C.card, borderRadius: '16px', border: `1px solid ${C.border}`, padding: '20px 24px 16px', boxShadow: C.shadowLg }}>
         <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '16px', textAlign: 'center' }}>
           Track Status Overview
           {selectedTopic !== 'All' && (
@@ -751,26 +748,8 @@ const StudentTrackGrid: React.FC<StudentTrackGridProps> = ({ students, schoolCod
           </span>
         </div>
       </div>
-
-        {/* Class-wise Tracking — horizontal bars, right column */}
-        {classwiseBreakdown.length > 0 && (
-          <div style={{ flex: 1 }}>
-            <StackedBarChart
-              title="Class-wise Tracking"
-              data={classwiseBreakdown}
-              height={340}
-              showXAxisLabels
-              maxBarSize={32}
-              barCategoryGap="25%"
-              segments={[
-                { key: 'On Track',       label: 'On Track',       color: '#10B981' },
-                { key: 'Slightly Off',   label: 'Slightly Off',   color: '#F59E0B' },
-                { key: 'Completely Off', label: 'Completely Off', color: '#F43F5E' },
-              ]}
-            />
-          </div>
-        )}
-      </div>{/* end flex row */}
+      </div>
+      )}{/* end bar chart */}
 
       {/* ── Inline threshold slider ── */}
       {selectedTopic !== 'All' && (

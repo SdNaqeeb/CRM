@@ -269,7 +269,7 @@ const SchoolDashboard: React.FC = () => {
   const tabs = [
     { key: 'students' as const, label: 'Students', count: filteredStudentsList.length, color: '#3B82F6' },
     // { key: 'teachers' as const, label: 'Teachers', count: filteredTeachersList.length, color: '#8B5CF6' },
-    { key: 'pre-assessment' as const, label: 'Pre-Assessment', count: testPrepData ? prepFilteredStudents.length : null, color: '#8B5CF6' },
+    { key: 'pre-assessment' as const, label: 'Spot Check', count: testPrepData ? prepFilteredStudents.length : null, color: '#8B5CF6' },
     { key: 'activity' as const, label: 'Activity', count: null, color: '#10B981' },
     { key: 'timeline' as const, label: 'Timeline', count: null, color: '#A78BFA' },
   ];
@@ -396,7 +396,7 @@ const SchoolDashboard: React.FC = () => {
                     <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#8B5CF6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
                   ))}
                 </div>
-                <p style={{ margin: 0, fontSize: '14px', color: '#94A3B8' }}>Loading pre-assessment data...</p>
+                <p style={{ margin: 0, fontSize: '14px', color: '#94A3B8' }}>Loading spot check data...</p>
               </div>
             ) : (
               <div>

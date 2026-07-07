@@ -26,7 +26,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\ff\\\\CRM_frontend\\\\src\" -Directory)",
       "Bash(Select-Object Name)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\ff\\\\CRM_frontend\\\\src\" -Name | Where-Object {$_ -match '^\\(utils|helpers|lib\\)$'})",
-      "Bash(node -e \"console.log\\(require\\('./node_modules/recharts/package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./node_modules/recharts/package.json'\\).version\\)\")",
+      "Bash(npx md-to-pdf *)"
     ]
   }
 }

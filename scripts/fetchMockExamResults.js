@@ -5,7 +5,8 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-const BASE_URL = 'https://crm.smartlearners.ai/backend-api';
+// const BASE_URL = 'https://crm.smartlearners.ai/backend-api';
+const BASE_URL = 'http://192.168.88.12:8000';
 const USERNAME = 'debo97062';
 const OUT_FILE = path.join(__dirname, '../src/data/mockExamAllResults.json');
 

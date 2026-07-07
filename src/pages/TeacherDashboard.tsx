@@ -9,7 +9,7 @@ import SendChallengeModal from '../components/SendChallengeModal';
 import StudentDetailModal from '../components/StudentDetailModal';
 import ActivityFeed from '../components/ActivityFeed';
 import WeeklyExamResults from '../components/WeeklyExamResults';
-import MockExamResults from '../components/MockExamResults';
+import MockExamResults, { CompareMockExams } from '../components/MockExamResults';
 import MockExamAnalysis from '../components/MockExamAnalysis';
 import StudentTrackGrid, { TrackPreloadData } from '../components/StudentTrackGrid';
 import ScheduledAssignmentsPanel from '../components/ScheduledAssignmentsPanel';
@@ -43,7 +43,7 @@ const TeacherDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [showGreeting, setShowGreeting] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'weekly-exams' | 'mock-exams' | 'mock-exam-analysis' | 'jee-exams' | 'pre-assessment' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'weekly-exams' | 'mock-exams' | 'mock-exam-analysis' | 'compare-mock-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('students');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
@@ -97,6 +97,7 @@ const TeacherDashboard: React.FC = () => {
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [challengeStudentId, setChallengeStudentId] = useState<number | null>(null);
   const [viewStudentId, setViewStudentId] = useState<number | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const teacherUsername = user?.username;
 
@@ -188,10 +189,11 @@ const TeacherDashboard: React.FC = () => {
   };
 
   const loadTestPrep = async () => {
-    if (testPrepData || !user?.school_code) return;
+    if (testPrepData) return;
+    const schoolCode = user?.school_code || 'ELP';
     try {
       setTestPrepLoading(true);
-      const result = await dashboardAPI.getTestPrepBySchoolCode(user.school_code);
+      const result = await dashboardAPI.getTestPrepBySchoolCode(schoolCode);
       setTestPrepData(result.items ?? []);
     } catch (err) {
       console.error('Failed to load test prep:', err);
@@ -394,7 +396,7 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
-  useEffect(() => { loadDashboard(); loadScheduledAssignments(); }, [teacherUsername]);
+  useEffect(() => { loadDashboard(); loadScheduledAssignments(); loadTestPrep(); }, [teacherUsername]);
 
   // Pre-fetch StudentTrackGrid Wave 1 data during the greeting screen so the
   // skeleton resolves faster once the main dashboard is ready.
@@ -478,6 +480,14 @@ const TeacherDashboard: React.FC = () => {
     }
     return (item.questions ?? []).map((q: any) => String(q.chapter || '')).filter(Boolean);
   };
+
+  const usernameByStudentId = useMemo(() => {
+    const map = new Map<number, string>();
+    (testPrepData ?? []).forEach((item) => {
+      if (item.student_id && item.username) map.set(item.student_id, item.username);
+    });
+    return map;
+  }, [testPrepData, dashboardData]);
 
   const testPrepByStudentId = useMemo(() => {
     const map = new Map<number, TestPrepItem[]>();
@@ -626,39 +636,34 @@ const TeacherDashboard: React.FC = () => {
 
 
   const navItems = [
-    { key: 'overview'      as const, label: 'Overview',              icon: 'home'     },
     { key: 'students'      as const, label: 'Students',              icon: 'users',   count: filteredStudents.length },
     { key: 'track-status'  as const, label: 'Track Status',          icon: 'grid'     },
-    { key: 'assignments'   as const, label: 'Assignments',           icon: 'calendar' },
-    { key: 'daily-quizzes' as const, label: 'Daily Quizzes',         icon: 'file'     },
-    { key: 'weekly-exams'  as const, label: 'Exams',                 icon: 'monitor'  },
     { key: 'mock-exams'          as const, label: 'Mock Exams',     icon: 'target'  },
-    { key: 'mock-exam-analysis'  as const, label: 'Exam Analysis',  icon: 'monitor' },
+    { key: 'mock-exam-analysis'  as const, label: 'Mock Exam Analysis',  icon: 'monitor' },
+    { key: 'compare-mock-exams'  as const, label: 'Compare Mock Exams',  icon: 'bar' },
   ];
 
   const handleNavClick = (key: typeof activeTab) => {
     setActiveTab(key);
     if (key === 'activity') loadActivity();
+    if (key === 'students') loadTestPrep();
     if (key === 'pre-assessment') loadTestPrep();
     if (key === 'daily-quizzes') loadQuizHomeworks();
     if (key === 'weekly-exams') loadTeacherExams();
     if (key === 'mock-exams') loadMockExams();
     if (key === 'mock-exam-analysis') loadMockExams();
+    if (key === 'compare-mock-exams') loadMockExams();
   };
 
   const sectionTitles: Record<typeof activeTab, string> = {
-    'overview': 'Overview', 'track-status': 'Track Status',
+    'track-status': 'Track Status',
     'assignments': 'Scheduled Assignments',
     'students': 'Students', 'daily-quizzes': 'Daily Quizzes',
-    'weekly-exams': 'Exams', 'mock-exams': 'Mock Exams', 'mock-exam-analysis': 'Mock Exam Analysis', 'jee-exams': 'JEE Format',
+    'weekly-exams': 'Exams', 'mock-exams': 'Mock Exams', 'mock-exam-analysis': 'Mock Exam Analysis', 'compare-mock-exams': 'Compare Mock Exams', 'jee-exams': 'JEE Format',
     'pre-assessment': 'Pre-Assessment', 'activity': 'Activity',
   };
 
   const TAB_HELP: Record<typeof activeTab, HelpItem[]> = {
-    overview: [
-      { icon: '📊', title: 'Stat Cards',   description: 'Total, active, inactive, and at-risk student counts for your class.' },
-      { icon: '🍩', title: 'Donut Chart',  description: 'Visual breakdown of active vs inactive students at a glance.' },
-    ],
     students: [
       { icon: '🔍', title: 'Filters',      description: 'Filter students by engagement status, section, or search by name.' },
       { icon: '👥', title: 'Student Table',description: 'Full list of your students with activity status, last seen, and quiz stats.' },
@@ -687,6 +692,10 @@ const TeacherDashboard: React.FC = () => {
       { icon: '📊', title: 'Programme KPIs', description: 'Total exams, submissions, and weighted average score across all mock exams.' },
       { icon: '📋', title: 'Exam List',      description: 'Full table of all mock exams with subject, date, submissions, and average.' },
     ],
+    'compare-mock-exams': [
+      { icon: '📊', title: 'Select Exams', description: 'Pick a class and section, then choose two mock exams to compare.' },
+      { icon: '📋', title: 'Side-by-Side', description: 'See score distributions and student-level changes between the two exams.' },
+    ],
     activity: [
       { icon: '🕒', title: 'Activity Feed', description: 'Chronological log of student logins, quiz attempts, and exam submissions.' },
     ],
@@ -703,10 +712,34 @@ const TeacherDashboard: React.FC = () => {
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
       <aside style={{
-        width: '220px', flexShrink: 0, background: C.cardBg,
+        width: sidebarCollapsed ? '72px' : '220px', flexShrink: 0, background: C.cardBg,
         borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column',
-        position: 'sticky', top: 0, height: 'calc(100vh - 64px)', overflowY: 'auto',
+        position: 'sticky', top: '64px', height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden',
+        transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
+        {/* Collapse toggle */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px', borderBottom: `1px solid ${C.border}` }}>
+          <button
+            onClick={() => setSidebarCollapsed(v => !v)}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
+              border: `1px solid ${C.border}`, background: 'transparent',
+              color: C.textMuted, cursor: 'pointer',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.cardAlt; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{
+              display: 'flex', transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: sidebarCollapsed ? 'rotate(180deg)' : 'none',
+            }}>
+              <DashboardIcon name="chevL" size={14} color={C.textMuted} />
+            </span>
+          </button>
+        </div>
+
         {/* Nav items */}
         <nav style={{ padding: '16px 10px', flex: 1 }}>
           {navItems.map((item, i) => {
@@ -716,6 +749,7 @@ const TeacherDashboard: React.FC = () => {
               <button
                 key={item.key}
                 onClick={() => handleNavClick(item.key)}
+                title={sidebarCollapsed ? item.label : undefined}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
                   padding: '12px 14px', borderRadius: '10px', border: 'none',
@@ -723,18 +757,28 @@ const TeacherDashboard: React.FC = () => {
                   color: isActive ? C.teal : C.textSecondary,
                   fontSize: '13px', fontWeight: isActive ? 700 : 500,
                   cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
-                  marginBottom: '6px', transition: 'all 0.12s',
+                  marginBottom: '6px', transition: 'background 0.12s',
+                  overflow: 'hidden',
                 }}
                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = C.cardAlt; }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
               >
                 <DashboardIcon name={item.icon} size={17} color={isActive ? C.teal : C.textMuted} />
-                <span style={{ flex: 1 }}>{item.label}</span>
+                <span style={{
+                  flex: 1, overflow: 'hidden', whiteSpace: 'nowrap',
+                  opacity: sidebarCollapsed ? 0 : 1,
+                  maxWidth: sidebarCollapsed ? 0 : '160px',
+                  transition: 'opacity 0.15s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}>{item.label}</span>
                 {'count' in item && item.count !== undefined && (
                   <span style={{
                     padding: '1px 7px', borderRadius: '99px', fontSize: '11px', fontWeight: 700,
                     background: isActive ? C.tealSoft : C.cardAlt,
                     color: isActive ? C.teal : C.textMuted,
+                    overflow: 'hidden', whiteSpace: 'nowrap', flexShrink: 0,
+                    opacity: sidebarCollapsed ? 0 : 1,
+                    maxWidth: sidebarCollapsed ? 0 : '60px',
+                    transition: 'opacity 0.15s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                   }}>{item.count}</span>
                 )}
               </button>
@@ -745,13 +789,18 @@ const TeacherDashboard: React.FC = () => {
         {/* Teacher info at bottom */}
         <div style={{ padding: '14px 16px', borderTop: `1px solid ${C.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
+            <div title={sidebarCollapsed ? teacherLabel : undefined} style={{
               width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
               background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '13px', fontWeight: 800, color: '#fff',
             }}>{initials}</div>
-            <div style={{ minWidth: 0 }}>
+            <div style={{
+              minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap',
+              opacity: sidebarCollapsed ? 0 : 1,
+              maxWidth: sidebarCollapsed ? 0 : '160px',
+              transition: 'opacity 0.15s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teacherLabel}</div>
               {user?.school_code && (
                 <span style={{ fontSize: '11px', fontWeight: 600, color: C.teal, background: C.tealSoft, padding: '1px 7px', borderRadius: '99px' }}>
@@ -788,82 +837,6 @@ const TeacherDashboard: React.FC = () => {
         <div style={{ padding: '24px 28px', flex: 1 }}>
 
         <PageHelpBar items={TAB_HELP[activeTab]} />
-
-        {/* ── Overview ─────────────────────────────────────────────────────── */}
-        {activeTab === 'overview' && (() => {
-          const tot = dashboardData.total_students || 1;
-          const act = dashboardData.active_students;
-          const inact = tot - act;
-          const R = 90, SW = 16, CX = 108, CY = 108, SZ = 216;
-          const circ = 2 * Math.PI * R;
-          const segs = [{ v: act, color: C.teal }, { v: inact, color: C.amber }];
-          let acc = 0;
-          return (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '22px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF }}>{greeting}, {teacherLabel}!</div>
-                <div style={{ fontSize: '13px', color: C.textMuted, marginTop: '4px' }}>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
-              </div>
-              {/* Two-column layout: stat cards left, donut right */}
-              <div style={{ display: 'flex', gap: '24px', alignItems: 'stretch' }}>
-
-                {/* Left: 2x2 stat cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', flex: 1 }}>
-                  {[
-                    { label: 'Total Students',  value: dashboardData.total_students,                                  color: C.teal,  bg: 'linear-gradient(135deg,rgba(124,58,237,0.12),rgba(124,58,237,0.06))' },
-                    { label: 'Active This Week', value: dashboardData.active_students,                                color: C.green, bg: 'linear-gradient(135deg,rgba(16,185,129,0.12),rgba(16,185,129,0.06))' },
-                    { label: 'Inactive',         value: dashboardData.total_students - dashboardData.active_students, color: C.amber, bg: 'linear-gradient(135deg,rgba(245,158,11,0.12),rgba(245,158,11,0.06))' },
-                    { label: 'At Risk',          value: dashboardData.at_risk_students,                              color: C.red,   bg: 'linear-gradient(135deg,rgba(244,63,94,0.12),rgba(244,63,94,0.06))' },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: s.bg, border: `1px solid ${C.border}`, borderRadius: '16px', padding: '32px 28px', boxShadow: C.shadow, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <div style={{ fontSize: '52px', fontWeight: 800, color: s.color, fontFamily: FONT_SERIF, lineHeight: 1 }}>{s.value}</div>
-                      <div style={{ fontSize: '14px', color: s.color, fontWeight: 700, marginTop: '12px', opacity: 0.8 }}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Right: Donut chart */}
-                <div style={{ flex: 1, background: C.card, border: `1px solid ${C.border}`, borderRadius: '20px', padding: '32px 40px', boxShadow: C.shadowLg, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '40px' }}>
-                  <div style={{ position: 'relative', width: SZ, height: SZ, flexShrink: 0 }}>
-                    <svg width={SZ} height={SZ} viewBox={`0 0 ${SZ} ${SZ}`}>
-                      <circle cx={CX} cy={CY} r={R} fill="none" stroke={C.border} strokeWidth={SW} />
-                      {segs.map((seg, i) => {
-                        const frac = Math.min(seg.v / tot, 1);
-                        const dash = frac * circ;
-                        const off = -acc;
-                        acc += dash;
-                        return <circle key={i} cx={CX} cy={CY} r={R} fill="none" stroke={seg.color} strokeWidth={SW} strokeDasharray={`${dash} ${circ}`} strokeDashoffset={off} transform={`rotate(-90 ${CX} ${CY})`} />;
-                      })}
-                    </svg>
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ fontSize: '12px', color: C.textMuted, fontWeight: 600, letterSpacing: '0.04em' }}>TOTAL</span>
-                      <span style={{ fontSize: '44px', fontWeight: 800, color: C.text, lineHeight: 1, fontFamily: FONT_SERIF }}>{tot}</span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>Student Activity</div>
-                    {[
-                      { label: 'Active (This Week)', color: C.teal,  v: act,   pct: Math.round(act / tot * 100) },
-                      { label: 'Inactive',           color: C.amber, v: inact, pct: Math.round(inact / tot * 100) },
-                    ].map(l => (
-                      <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: 12, height: 12, borderRadius: '3px', background: l.color, flexShrink: 0 }} />
-                        <div>
-                          <div style={{ fontSize: '13px', color: C.textSecondary, fontWeight: 500 }}>{l.label}</div>
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginTop: '2px' }}>
-                            <span style={{ fontSize: '28px', color: C.text, fontWeight: 800, fontFamily: FONT_SERIF }}>{l.v}</span>
-                            <span style={{ fontSize: '13px', color: C.textMuted, fontWeight: 600 }}>{l.pct}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          );
-        })()}
 
         {/* ── Track Status — always mounted to prevent reload on tab switch ── */}
         <div style={{ display: activeTab === 'track-status' ? 'block' : 'none' }}>
@@ -904,13 +877,7 @@ const TeacherDashboard: React.FC = () => {
         {/* ── Students ─────────────────────────────────────────────────────── */}
         {activeTab === 'students' && (
           <div>
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: '4px' }}>Last active</span>
-              {dayFilterOptions.map((opt) => (
-                <button key={String(opt.value)} onClick={() => setDayFilter(opt.value)} style={{ padding: '5px 14px', borderRadius: '8px', border: dayFilter === opt.value ? `1.5px solid ${C.teal}` : `1.5px solid ${C.border}`, background: dayFilter === opt.value ? C.tealSoft : 'transparent', color: dayFilter === opt.value ? C.teal : C.textSecondary, fontSize: '13px', fontWeight: dayFilter === opt.value ? 700 : 500, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s' }}>{opt.label}</button>
-              ))}
-            </div>
-            <StudentTable students={filteredStudents} onSendAlert={handleSendAlert} onSendChallenge={handleSendChallenge} onViewDetails={(studentId) => setViewStudentId(studentId)} selectedIds={selectedIds} onSelectionChange={setSelectedIds} />
+            <StudentTable students={filteredStudents} onSendAlert={handleSendAlert} onSendChallenge={handleSendChallenge} onViewDetails={(studentId) => setViewStudentId(studentId)} selectedIds={selectedIds} onSelectionChange={setSelectedIds} usernameByStudentId={usernameByStudentId} />
           </div>
         )}
 
@@ -1057,15 +1024,25 @@ const TeacherDashboard: React.FC = () => {
             onSelectExam={handleSelectMockExam}
             results={mockExamResults}
             resultsLoading={mockExamResultsLoading}
+            onFetchExamsForSection={fetchMockExamsForSection}
+          />
+        )}
+
+        {/* ── Compare Mock Exams ───────────────────────────────────────────── */}
+        {activeTab === 'compare-mock-exams' && (
+          <CompareMockExams
+            exams={mockExams ?? []}
+            examClassOptions={mockExamClassOptions}
+            examSectionOptions={mockExamSectionOptions}
+            onFetchExamsForSection={fetchMockExamsForSection}
             compareExamIds={compareExamIds}
             compareResults={compareResults}
             compareLoading={compareLoading}
             onCompare={handleCompareExams}
             onExitCompare={handleExitCompare}
-            onFetchExamsForSection={fetchMockExamsForSection}
+            teacherUsername={teacherUsername ?? ''}
           />
         )}
-
 
         {/* ── Mock Exam Analysis ───────────────────────────────────────────── */}
         {activeTab === 'mock-exam-analysis' && (
@@ -1076,6 +1053,8 @@ const TeacherDashboard: React.FC = () => {
             onSelectExam={handleSelectAnalysisExam}
             examResults={analysisResults}
             resultsLoading={analysisResultsLoading}
+            roster={dashboardData.students}
+            onRefreshExams={() => loadMockExams()}
           />
         )}
 

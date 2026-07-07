@@ -107,16 +107,7 @@ const LoginPage: React.FC = () => {
         </svg>
       ),
     },
-    {
-      value: UserRole.ORCALEX_ADMIN,
-      label: 'OrcaLex',
-      icon: (
-        <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-          <path d="M12 2L2 7l10 5 10-5-10-5z" strokeLinejoin="round" />
-          <path d="M2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
-    },
+    // OrcaLex Admin role intentionally hidden from UI selector; logic remains in place.
   ];
 
   const activeColor = roleConfig[role]?.color || '#14B8A6';

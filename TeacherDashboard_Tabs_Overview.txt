@@ -1,0 +1,45 @@
+TEACHER DASHBOARD — TAB OVERVIEW
+(For PPT — one tab per slide, content kept short)
+=================================================
+
+1. STUDENTS
+-----------
+Purpose: Full roster view of all students assigned to the teacher.
+- Filters: search by name, filter by engagement status or section.
+- Student Table: shows activity status, last seen, and quiz stats per student.
+- Bulk Alert: select multiple students and send a WhatsApp alert in one action.
+
+2. TRACK STATUS
+----------------
+Purpose: At-a-glance view of student progress across assignments.
+- Status Overview: bar chart of students grouped as On Track / Slightly Off / Completely Off.
+- Topic Filter: narrow the view to one topic to see per-student performance.
+- Student Cards: click a bar to expand cards; tap a card for topic-level breakdown.
+
+3. MOCK EXAMS
+--------------
+Purpose: Browse all mock exams assigned to the teacher's classes.
+- Exam list with title, code, chapters covered, submission count, and average score.
+- Click an exam to drill into individual student results, rank, and time taken.
+- Date filter (with quick previous/next day navigation) to jump to a specific day's exams.
+
+4. MOCK EXAM ANALYSIS
+-----------------------
+Purpose: Programme-wide analytics across all mock exams.
+- KPI cards: total exams, submissions, and weighted average score.
+- Subject breakdown and "students appeared / never appeared" tracking.
+- Recent exams deep-dive: score trends, score-band distribution, section-wise patterns.
+- Click into any exam for a full summary: score distribution, time-vs-score, flagged
+  (rushed / fast-and-perfect) attempts, and a "needs review" watch-list.
+
+5. COMPARE MOCK EXAMS
+-----------------------
+Purpose: Side-by-side comparison between two mock exams or across time periods.
+- Before vs After Summer chart: Class 10 section-wise average scores, April vs June,
+  with a Math/Science toggle — shows improvement or drop per section at a glance.
+- Pick any class, section, and two exams to compare score distributions directly.
+- See student-level score changes and rank shifts between the two selected exams.
+
+=================================================
+Notes for slides: each section above maps to one slide — heading + 2-4 bullets.
+Keep bullets as-is or trim further; avoid pasting screenshots with small text.
