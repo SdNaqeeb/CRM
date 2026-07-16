@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { dashboardAPI, alertAPI, activityAPI, challengeAPI, quizAPI, examAPI, ScheduledAssignmentItem, QuizHomeworkItem, QuizSubmissionItem, TeacherExamItem, ExamAttemptItem, MockExamItem, MockExamResultItem } from '../services/api';
+import { dashboardAPI, alertAPI, activityAPI, challengeAPI, quizAPI, examAPI, ScheduledAssignmentItem, QuizHomeworkItem, QuizSubmissionItem, TeacherExamsResponse, MockExamItem, MockExamResultItem } from '../services/api';
 import { TeacherDashboardData, ActivityOverview, TestPrepItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
@@ -8,7 +8,7 @@ import SendAlertModal from '../components/SendAlertModal';
 import SendChallengeModal from '../components/SendChallengeModal';
 import StudentDetailModal from '../components/StudentDetailModal';
 import ActivityFeed from '../components/ActivityFeed';
-import WeeklyExamResults from '../components/WeeklyExamResults';
+import ExamCorrectionPanel from '../components/ExamCorrectionPanel';
 import MockExamResults, { CompareMockExams } from '../components/MockExamResults';
 import MockExamAnalysis from '../components/MockExamAnalysis';
 import StudentTrackGrid, { TrackPreloadData } from '../components/StudentTrackGrid';
@@ -43,7 +43,7 @@ const TeacherDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [showGreeting, setShowGreeting] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'weekly-exams' | 'mock-exams' | 'mock-exam-analysis' | 'compare-mock-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('students');
+  const [activeTab, setActiveTab] = useState<'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'exam-correction' | 'mock-exams' | 'mock-exam-analysis' | 'compare-mock-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('students');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
@@ -55,11 +55,8 @@ const TeacherDashboard: React.FC = () => {
   const [homeworkSubmissions, setHomeworkSubmissions] = useState<QuizSubmissionItem[] | null>(null);
   const [homeworkSubmissionsLoading, setHomeworkSubmissionsLoading] = useState(false);
 
-  const [teacherExams, setTeacherExams] = useState<TeacherExamItem[] | null>(null);
+  const [teacherExamsData, setTeacherExamsData] = useState<TeacherExamsResponse | null>(null);
   const [teacherExamsLoading, setTeacherExamsLoading] = useState(false);
-  const [selectedExamId, setSelectedExamId] = useState<number | null>(null);
-  const [examAttempts, setExamAttempts] = useState<ExamAttemptItem[] | null>(null);
-  const [examAttemptsLoading, setExamAttemptsLoading] = useState(false);
 
   const [mockExams, setMockExams] = useState<MockExamItem[] | null>(null);
   const [mockExamsLoading, setMockExamsLoading] = useState(false);
@@ -218,14 +215,14 @@ const TeacherDashboard: React.FC = () => {
   };
 
   const loadTeacherExams = async () => {
-    if (teacherExams || !teacherUsername) return;
+    if (teacherExamsData || !teacherUsername) return;
     try {
       setTeacherExamsLoading(true);
       const data = await examAPI.getTeacherExams(teacherUsername);
-      setTeacherExams(data.items ?? []);
+      setTeacherExamsData(data);
     } catch (err) {
       console.error('Failed to load teacher exams:', err);
-      setTeacherExams([]);
+      setTeacherExamsData(null);
     } finally {
       setTeacherExamsLoading(false);
     }
@@ -286,22 +283,6 @@ const TeacherDashboard: React.FC = () => {
     setMockExamClassFilter(classFilter);
     setMockExamSectionFilter(sectionFilter);
     loadMockExams(classFilter, sectionFilter, true);
-  };
-
-  const handleSelectExam = async (examId: number) => {
-    if (examId === 0) { setSelectedExamId(null); setExamAttempts(null); return; }
-    setSelectedExamId(examId);
-    setExamAttempts(null);
-    try {
-      setExamAttemptsLoading(true);
-      const data = await examAPI.getExamAttempts(examId);
-      setExamAttempts(data.items ?? []);
-    } catch (err) {
-      console.error('Failed to load exam attempts:', err);
-      setExamAttempts([]);
-    } finally {
-      setExamAttemptsLoading(false);
-    }
   };
 
   const handleSelectMockExam = async (homeworkId: number) => {
@@ -636,11 +617,12 @@ const TeacherDashboard: React.FC = () => {
 
 
   const navItems = [
-    { key: 'students'      as const, label: 'Students',              icon: 'users',   count: filteredStudents.length },
-    { key: 'track-status'  as const, label: 'Track Status',          icon: 'grid'     },
-    { key: 'mock-exams'          as const, label: 'Mock Exams',     icon: 'target'  },
-    { key: 'mock-exam-analysis'  as const, label: 'Mock Exam Analysis',  icon: 'monitor' },
-    { key: 'compare-mock-exams'  as const, label: 'Compare Mock Exams',  icon: 'bar' },
+    { key: 'students' as const, label: 'Students', icon: 'users', count: filteredStudents.length },
+    { key: 'exam-correction' as const, label: 'Exam Correction', icon: 'file', count: teacherExamsData?.total_exams },
+    { key: 'track-status' as const, label: 'Track Status', icon: 'grid' },
+    { key: 'mock-exams' as const, label: 'Mock Exams', icon: 'target' },
+    { key: 'mock-exam-analysis' as const, label: 'Mock Exam Analysis', icon: 'monitor' },
+    { key: 'compare-mock-exams' as const, label: 'Compare Mock Exams', icon: 'bar' },
   ];
 
   const handleNavClick = (key: typeof activeTab) => {
@@ -649,7 +631,7 @@ const TeacherDashboard: React.FC = () => {
     if (key === 'students') loadTestPrep();
     if (key === 'pre-assessment') loadTestPrep();
     if (key === 'daily-quizzes') loadQuizHomeworks();
-    if (key === 'weekly-exams') loadTeacherExams();
+    if (key === 'exam-correction') loadTeacherExams();
     if (key === 'mock-exams') loadMockExams();
     if (key === 'mock-exam-analysis') loadMockExams();
     if (key === 'compare-mock-exams') loadMockExams();
@@ -659,7 +641,7 @@ const TeacherDashboard: React.FC = () => {
     'track-status': 'Track Status',
     'assignments': 'Scheduled Assignments',
     'students': 'Students', 'daily-quizzes': 'Daily Quizzes',
-    'weekly-exams': 'Exams', 'mock-exams': 'Mock Exams', 'mock-exam-analysis': 'Mock Exam Analysis', 'compare-mock-exams': 'Compare Mock Exams', 'jee-exams': 'JEE Format',
+    'exam-correction': 'Exam Correction', 'mock-exams': 'Mock Exams', 'mock-exam-analysis': 'Mock Exam Analysis', 'compare-mock-exams': 'Compare Mock Exams', 'jee-exams': 'JEE Format',
     'pre-assessment': 'Pre-Assessment', 'activity': 'Activity',
   };
 
@@ -683,9 +665,9 @@ const TeacherDashboard: React.FC = () => {
       { icon: '📝', title: 'Quiz List',    description: 'All daily quizzes you have assigned, with submission and view counts.' },
       { icon: '📈', title: 'Submission Stats', description: 'See how many students have attempted or skipped each quiz.' },
     ],
-    'weekly-exams': [
-      { icon: '🎯', title: 'Exam List',    description: 'All exams you have set, sorted by most recent.' },
-      { icon: '📉', title: 'Score Breakdown', description: 'Select an exam to see each student\'s score and attempt details.' },
+    'exam-correction': [
+      { icon: 'Exam', title: 'Exam Cards', description: 'Each card shows exam type, student count, average score, top score, and processed students.' },
+      { icon: 'Files', title: 'File Metrics', description: 'Review uploaded question papers, answer sheets, and processing timestamps for each corrected exam.' },
     ],
     'mock-exams': [],
     'mock-exam-analysis': [
@@ -1007,8 +989,8 @@ const TeacherDashboard: React.FC = () => {
           )}
 
         {/* ── Exams ────────────────────────────────────────────────────────── */}
-        {activeTab === 'weekly-exams' && (
-          <WeeklyExamResults exams={teacherExams ?? []} loading={teacherExamsLoading} onSelectExam={handleSelectExam} selectedExamId={selectedExamId} attempts={examAttempts} attemptsLoading={examAttemptsLoading} />
+        {activeTab === 'exam-correction' && (
+          <ExamCorrectionPanel data={teacherExamsData} loading={teacherExamsLoading} />
         )}
 
         {activeTab === 'mock-exams' && (

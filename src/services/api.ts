@@ -280,11 +280,48 @@ export interface QuizSubmissionItem {
 // ============= Exam APIs =============
 export interface TeacherExamItem {
   exam_id: number;
-  exam_name: string;
+  name: string;
+  exam_name?: string;
   exam_type: string;
   total_students: number;
-  average_score: number;
-  attempted_count: number;
+  average_score: number | null;
+  attempted_count?: number | null;
+  teacher_id?: number | null;
+  teacher_username?: string | null;
+  teacher_name?: string | null;
+  class_section_id?: number | null;
+  techer_section_ref_id?: number | null;
+  class_analytics?: {
+    top_score?: number | null;
+    lowest_score?: number | null;
+  } | null;
+  processing_summary?: {
+    processed_students?: number | null;
+    [key: string]: any;
+  } | null;
+  question_paper_snapshot?: Array<{
+    file_name: string;
+    url: string;
+  }>;
+  answer_sheets_snapshot?: Array<{
+    file_name: string;
+    url: string;
+  }>;
+  admission_exam?: boolean;
+  active?: boolean;
+  created_at?: string | null;
+  processed_at?: string | null;
+}
+
+export interface TeacherExamsResponse {
+  teacher_id: number;
+  teacher_username: string;
+  teacher_name: string;
+  school_id: number;
+  school_name: string;
+  school_code: string | null;
+  total_exams: number;
+  items: TeacherExamItem[];
 }
 
 export interface ExamAttemptItem {
@@ -344,13 +381,7 @@ export interface MockExamResultItem {
 export const examAPI = {
   getTeacherExams: async (username: string, limit: number = 100) => {
     const response = await api.post('/api/external-data/teacher-exams/by-username', { username, limit });
-    return response.data as {
-      username: string;
-      teacher_id: number;
-      school_id: number;
-      total: number;
-      items: TeacherExamItem[];
-    };
+    return response.data as TeacherExamsResponse;
   },
 
   getExamAttempts: async (examId: number, limit: number = 1000) => {

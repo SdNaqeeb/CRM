@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { TeacherExamItem, ExamAttemptItem } from '../services/api';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
@@ -12,7 +12,7 @@ interface WeeklyExamResultsProps {
   attemptsLoading: boolean;
 }
 
-const scoreColor = (pct: number) => pct >= 70 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#F43F5E';
+const scoreColor = (pct?: number | null) => pct == null ? '#94A3B8' : pct >= 70 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#F43F5E';
 
 const WeeklyExamResults: React.FC<WeeklyExamResultsProps> = ({
   exams, loading, onSelectExam, selectedExamId, attempts, attemptsLoading,
@@ -79,17 +79,17 @@ const WeeklyExamResults: React.FC<WeeklyExamResultsProps> = ({
                   onMouseEnter={e => (e.currentTarget.style.background = 'rgba(245,158,11,0.06)')}
                   onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)')}
                 >
-                  <td style={{ padding: '12px 16px', fontWeight: 600, color: '#F1F5F9' }}>{exam.exam_name}</td>
+                  <td style={{ padding: '12px 16px', fontWeight: 600, color: '#F1F5F9' }}>{exam.name ?? exam.exam_name ?? `Exam #${exam.exam_id}`}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(245,158,11,0.12)', color: '#F59E0B', fontSize: '11px', fontWeight: 600, textTransform: 'capitalize' }}>
                       {exam.exam_type}
                     </span>
                   </td>
                   <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{exam.total_students}</td>
-                  <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{exam.attempted_count}</td>
+                  <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{exam.attempted_count ?? '-'}</td>
                   <td style={{ padding: '12px 16px' }}>
                     <span style={{ fontWeight: 700, color: scoreColor(exam.average_score), fontSize: '14px' }}>
-                      {exam.average_score.toFixed(1)}%
+                      {exam.average_score == null ? '-' : `${exam.average_score.toFixed(1)}%`}
                     </span>
                   </td>
                 </tr>
@@ -152,7 +152,7 @@ const WeeklyExamResults: React.FC<WeeklyExamResultsProps> = ({
               ) : (
                 <div style={{ background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
                   <div style={{ padding: '14px 18px', borderBottom: '1px solid #1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#F1F5F9' }}>{selectedExam?.exam_name}</span>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#F1F5F9' }}>{selectedExam?.name ?? selectedExam?.exam_name ?? 'Exam'}</span>
                     <span style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(245,158,11,0.15)', fontSize: '11px', fontWeight: 700, color: '#F59E0B' }}>
                       {rankedAttempts.length} students
                     </span>
