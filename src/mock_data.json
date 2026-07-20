@@ -1,0 +1,487 @@
+{
+  "mockData": {
+    "teacher": {
+      "id": 1,
+      "name": "Nikhil Kumar",
+      "school_code": "DELHI_001",
+      "school_name": "Delhi Public School",
+      "total_students": 30
+    },
+
+    "dailyMCQQuizzes": [
+      {
+        "quiz_id": 1,
+        "sent_date": "2026-05-04",
+        "subject": "Physics",
+        "chapter": "Electromagnetism",
+        "num_questions": 5,
+        "concept": "Faraday's Law",
+        "total_sent": 30,
+        "attempts": 27,
+        "avg_score_percent": 72
+      },
+      {
+        "quiz_id": 2,
+        "sent_date": "2026-05-03",
+        "subject": "Chemistry",
+        "chapter": "Organic Chemistry",
+        "num_questions": 5,
+        "concept": "Substitution Reactions",
+        "total_sent": 30,
+        "attempts": 28,
+        "avg_score_percent": 68
+      },
+      {
+        "quiz_id": 3,
+        "sent_date": "2026-05-02",
+        "subject": "Mathematics",
+        "chapter": "Calculus",
+        "num_questions": 5,
+        "concept": "Integration by Parts",
+        "total_sent": 30,
+        "attempts": 25,
+        "avg_score_percent": 65
+      }
+    ],
+
+    "dailyMCQQuizAttempts": [
+      {
+        "attempt_id": 101,
+        "quiz_id": 1,
+        "student_id": 1,
+        "student_name": "Aarav Sharma",
+        "subject": "Physics",
+        "score": 4,
+        "total_questions": 5,
+        "score_percent": 80,
+        "time_spent_sec": 342,
+        "attempted_at": "2026-05-04T14:30:00Z",
+        "status": "completed"
+      },
+      {
+        "attempt_id": 102,
+        "quiz_id": 1,
+        "student_id": 2,
+        "student_name": "Bhavna Kapoor",
+        "subject": "Physics",
+        "score": 3,
+        "total_questions": 5,
+        "score_percent": 60,
+        "time_spent_sec": 420,
+        "attempted_at": "2026-05-04T15:10:00Z",
+        "status": "completed"
+      },
+      {
+        "attempt_id": 103,
+        "quiz_id": 1,
+        "student_id": 3,
+        "student_name": "Chirag Patel",
+        "subject": "Physics",
+        "score": 5,
+        "total_questions": 5,
+        "score_percent": 100,
+        "time_spent_sec": 298,
+        "attempted_at": "2026-05-04T16:45:00Z",
+        "status": "completed"
+      }
+    ],
+
+    "weeklyProperExams": [
+      {
+        "exam_id": 501,
+        "exam_date": "2026-05-03",
+        "exam_type": "weekly_proper",
+        "week": 18,
+        "total_students": 30,
+        "students_appeared": 28,
+        "results": [
+          {
+            "student_id": 1,
+            "student_name": "Aarav Sharma",
+            "grade": "12A",
+            "section": "A",
+            "total_marks": 95,
+            "max_marks": 100,
+            "percentage": 95,
+            "rank": 1,
+            "pass": true,
+            "questions_correct": 38,
+            "questions_wrong": 2,
+            "questions_skipped": 0
+          },
+          {
+            "student_id": 2,
+            "student_name": "Bhavna Kapoor",
+            "grade": "12A",
+            "section": "A",
+            "total_marks": 78,
+            "max_marks": 100,
+            "percentage": 78,
+            "rank": 5,
+            "pass": true,
+            "questions_correct": 31,
+            "questions_wrong": 9,
+            "questions_skipped": 0
+          },
+          {
+            "student_id": 3,
+            "student_name": "Chirag Patel",
+            "grade": "12A",
+            "section": "B",
+            "total_marks": 88,
+            "max_marks": 100,
+            "percentage": 88,
+            "rank": 2,
+            "pass": true,
+            "questions_correct": 35,
+            "questions_wrong": 5,
+            "questions_skipped": 0
+          }
+        ]
+      },
+      {
+        "exam_id": 502,
+        "exam_date": "2026-04-26",
+        "exam_type": "weekly_proper",
+        "week": 17,
+        "total_students": 30,
+        "students_appeared": 27,
+        "results": [
+          {
+            "student_id": 1,
+            "student_name": "Aarav Sharma",
+            "grade": "12A",
+            "section": "A",
+            "total_marks": 92,
+            "max_marks": 100,
+            "percentage": 92,
+            "rank": 2,
+            "pass": true,
+            "questions_correct": 37,
+            "questions_wrong": 3,
+            "questions_skipped": 0
+          }
+        ]
+      }
+    ],
+
+    "weeklyJEEExams": [
+      {
+        "exam_id": 601,
+        "exam_date": "2026-05-04",
+        "exam_type": "jee_format",
+        "week": 18,
+        "total_marks": 360,
+        "duration_minutes": 180,
+        "total_students": 30,
+        "students_appeared": 29,
+        "results": [
+          {
+            "student_id": 1,
+            "student_name": "Aarav Sharma",
+            "grade": "12A",
+            "section": "A",
+            "total_score": 285,
+            "max_score": 360,
+            "score_percent": 79.2,
+            "rank": 1,
+            "physics": {
+              "attempted": 20,
+              "correct": 18,
+              "incorrect": 2,
+              "skipped": 0,
+              "score": 96,
+              "max_score": 120
+            },
+            "chemistry": {
+              "attempted": 20,
+              "correct": 17,
+              "incorrect": 3,
+              "skipped": 0,
+              "score": 93,
+              "max_score": 120
+            },
+            "mathematics": {
+              "attempted": 20,
+              "correct": 16,
+              "incorrect": 4,
+              "skipped": 0,
+              "score": 96,
+              "max_score": 120
+            },
+            "time_spent_sec": 10800,
+            "accuracy_percent": 85.7
+          },
+          {
+            "student_id": 2,
+            "student_name": "Bhavna Kapoor",
+            "grade": "12A",
+            "section": "A",
+            "total_score": 228,
+            "max_score": 360,
+            "score_percent": 63.3,
+            "rank": 8,
+            "physics": {
+              "attempted": 18,
+              "correct": 14,
+              "incorrect": 4,
+              "skipped": 2,
+              "score": 72,
+              "max_score": 120
+            },
+            "chemistry": {
+              "attempted": 19,
+              "correct": 15,
+              "incorrect": 4,
+              "skipped": 1,
+              "score": 78,
+              "max_score": 120
+            },
+            "mathematics": {
+              "attempted": 17,
+              "correct": 12,
+              "incorrect": 5,
+              "skipped": 3,
+              "score": 78,
+              "max_score": 120
+            },
+            "time_spent_sec": 10800,
+            "accuracy_percent": 71.4
+          }
+        ]
+      }
+    ],
+
+    "dailyEngagementTracking": [
+      {
+        "student_id": 1,
+        "student_name": "Aarav Sharma",
+        "grade": "12A",
+        "section": "A",
+        "current_week": [
+          {
+            "date": "2026-04-28",
+            "day": "Monday",
+            "time_spent_minutes": 62,
+            "target_met": true,
+            "sessions": 2
+          },
+          {
+            "date": "2026-04-29",
+            "day": "Tuesday",
+            "time_spent_minutes": 58,
+            "target_met": false,
+            "sessions": 2
+          },
+          {
+            "date": "2026-04-30",
+            "day": "Wednesday",
+            "time_spent_minutes": 75,
+            "target_met": true,
+            "sessions": 3
+          },
+          {
+            "date": "2026-05-01",
+            "day": "Thursday",
+            "time_spent_minutes": 68,
+            "target_met": true,
+            "sessions": 2
+          },
+          {
+            "date": "2026-05-02",
+            "day": "Friday",
+            "time_spent_minutes": 55,
+            "target_met": false,
+            "sessions": 2
+          },
+          {
+            "date": "2026-05-03",
+            "day": "Saturday",
+            "time_spent_minutes": 90,
+            "target_met": true,
+            "sessions": 4
+          },
+          {
+            "date": "2026-05-04",
+            "day": "Sunday",
+            "time_spent_minutes": 45,
+            "target_met": false,
+            "sessions": 1
+          }
+        ],
+        "weekly_total_minutes": 453,
+        "target_hours": 7.0,
+        "achieved_hours": 7.55,
+        "target_met": true,
+        "streak_days": 3,
+        "compliance_percent": 85.7
+      },
+      {
+        "student_id": 2,
+        "student_name": "Bhavna Kapoor",
+        "grade": "12A",
+        "section": "A",
+        "current_week": [
+          {
+            "date": "2026-04-28",
+            "day": "Monday",
+            "time_spent_minutes": 48,
+            "target_met": false,
+            "sessions": 1
+          },
+          {
+            "date": "2026-04-29",
+            "day": "Tuesday",
+            "time_spent_minutes": 72,
+            "target_met": true,
+            "sessions": 2
+          },
+          {
+            "date": "2026-04-30",
+            "day": "Wednesday",
+            "time_spent_minutes": 65,
+            "target_met": true,
+            "sessions": 2
+          },
+          {
+            "date": "2026-05-01",
+            "day": "Thursday",
+            "time_spent_minutes": 52,
+            "target_met": false,
+            "sessions": 2
+          },
+          {
+            "date": "2026-05-02",
+            "day": "Friday",
+            "time_spent_minutes": 40,
+            "target_met": false,
+            "sessions": 1
+          },
+          {
+            "date": "2026-05-03",
+            "day": "Saturday",
+            "time_spent_minutes": 58,
+            "target_met": false,
+            "sessions": 1
+          },
+          {
+            "date": "2026-05-04",
+            "day": "Sunday",
+            "time_spent_minutes": 35,
+            "target_met": false,
+            "sessions": 1
+          }
+        ],
+        "weekly_total_minutes": 370,
+        "target_hours": 7.0,
+        "achieved_hours": 6.17,
+        "target_met": false,
+        "streak_days": 1,
+        "compliance_percent": 61.7
+      }
+    ],
+
+    "weeklyParentReports": [
+      {
+        "report_id": 1001,
+        "student_id": 1,
+        "student_name": "Aarav Sharma",
+        "parent_name": "Rajesh Sharma",
+        "parent_phone": "+91-98765-43210",
+        "parent_email": "rajesh.sharma@email.com",
+        "week": 18,
+        "report_date": "2026-05-04",
+        "report_period": "2026-04-28 to 2026-05-04",
+        "engagement": {
+          "target_hours": 7.0,
+          "achieved_hours": 7.55,
+          "target_met": true,
+          "status": "Excellent",
+          "streak": 3,
+          "daily_breakdown": "62m, 58m, 75m, 68m, 55m, 90m, 45m"
+        },
+        "daily_quizzes": {
+          "quizzes_sent": 7,
+          "quizzes_attempted": 6,
+          "attempts_percent": 85.7,
+          "avg_score": 78,
+          "trend": "improving"
+        },
+        "weekly_exam": {
+          "score": 95,
+          "max_score": 100,
+          "percentage": 95,
+          "rank": 1,
+          "class_avg": 72,
+          "status": "Excellent"
+        },
+        "jee_format_exam": {
+          "score": 285,
+          "max_score": 360,
+          "percentage": 79.2,
+          "rank": 1,
+          "physics_score": 96,
+          "chemistry_score": 93,
+          "mathematics_score": 96,
+          "accuracy": 85.7,
+          "class_avg_percent": 61.5
+        },
+        "summary": "Aarav is performing exceptionally well! He has maintained excellent engagement, scored top rank in both weekly and JEE format exams, and shows consistent improvement in daily quizzes.",
+        "concerns": null,
+        "recommendations": "Continue the current learning pace. Consider advanced problems for further challenge.",
+        "status": "pending",
+        "scheduled_send_time": "2026-05-05T09:00:00Z"
+      },
+      {
+        "report_id": 1002,
+        "student_id": 2,
+        "student_name": "Bhavna Kapoor",
+        "parent_name": "Priya Kapoor",
+        "parent_phone": "+91-98765-43211",
+        "parent_email": "priya.kapoor@email.com",
+        "week": 18,
+        "report_date": "2026-05-04",
+        "report_period": "2026-04-28 to 2026-05-04",
+        "engagement": {
+          "target_hours": 7.0,
+          "achieved_hours": 6.17,
+          "target_met": false,
+          "status": "Below Target",
+          "streak": 1,
+          "daily_breakdown": "48m, 72m, 65m, 52m, 40m, 58m, 35m"
+        },
+        "daily_quizzes": {
+          "quizzes_sent": 7,
+          "quizzes_attempted": 5,
+          "attempts_percent": 71.4,
+          "avg_score": 65,
+          "trend": "stable"
+        },
+        "weekly_exam": {
+          "score": 78,
+          "max_score": 100,
+          "percentage": 78,
+          "rank": 5,
+          "class_avg": 72,
+          "status": "Good"
+        },
+        "jee_format_exam": {
+          "score": 228,
+          "max_score": 360,
+          "percentage": 63.3,
+          "rank": 8,
+          "physics_score": 72,
+          "chemistry_score": 78,
+          "mathematics_score": 78,
+          "accuracy": 71.4,
+          "class_avg_percent": 61.5
+        },
+        "summary": "Bhavna is performing adequately but needs more consistent engagement. She is below the 1-hour daily target and has not attempted all quizzes. Chemistry is her strength; Mathematics needs focus.",
+        "concerns": "Engagement below target. Skipping questions in Mathematics during JEE format exam.",
+        "recommendations": "Encourage daily 1-hour engagement. Focus on Mathematics problem-solving. Regular practice of previous year JEE questions.",
+        "status": "pending",
+        "scheduled_send_time": "2026-05-05T09:00:00Z"
+      }
+    ]
+  }
+}

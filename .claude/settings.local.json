@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python test_dummy_data.py)",
+      "WebFetch(domain:crm.smartlearners.ai)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/external-data/user-sessions/all\" -X POST -H \"Content-Type: application/json\" -d \"{\\\\\"limit\\\\\": 500}\")",
+      "Bash(python -c ' *)",
+      "Bash(curl -s -X POST \"https://crm.smartlearners.ai/backend-api/api/external-data/quiz-homework/by-username\" -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\": \\\\\"nikhil\\\\\", \\\\\"limit\\\\\": 5}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('total'\\), d.get\\('detail',''\\)\\)\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/dashboard/teacher/by-username/nikhil\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)[:5] if isinstance\\(d,dict\\) else d\\)\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/external-data/test-prep/by-school-code\" -X POST -H \"Content-Type: application/json\" -d \"{\\\\\"school_code\\\\\": \\\\\"HPS\\\\\", \\\\\"limit\\\\\": 5}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d\\)[:500]\\)\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/external-data/quiz-homework/by-username\" -X POST -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\": \\\\\"10HPS17\\\\\", \\\\\"limit\\\\\": 5}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('role check:', json.dumps\\(d\\)[:300]\\)\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/dashboard/teacher/4\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/dashboard/school/9\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/dashboard/teacher/by-username/mohan@gmail.com\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d\\)[:200]\\)\")",
+      "Bash(curl -s \"https://crm.smartlearners.ai/backend-api/api/dashboard/teacher/76\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d\\)[:300]\\)\")",
+      "WebSearch",
+      "Bash(Get-ChildItem -Recurse \"c:\\\\ff\\\\CRM_frontend\\\\misc\\\\teacher_dash_extracted\")",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\ff\\\\CRM_frontend\\\\src\" -Directory)",
+      "Bash(Select-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\ff\\\\CRM_frontend\\\\src\" -Name | Where-Object {$_ -match '^\\(utils|helpers|lib\\)$'})",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/recharts/package.json'\\).version\\)\")",
+      "Bash(npx md-to-pdf *)"
+    ]
+  }
+}

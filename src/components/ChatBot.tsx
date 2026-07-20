@@ -14,14 +14,14 @@ interface Message {
 
 const SUGGESTIONS: Record<string, string[]> = {
   teacher: [
-    'How are my students doing?',
-    'What is the improvement this week?',
     'Which students are at risk?',
-    'Who are the most active students?',
-    'Which students are scoring lowest?',
-    'How are students doing in Math?',
-    'How many submitted homework this week?',
+    'Who hasn\'t logged in this week?',
     'Show inactive students',
+    'Who are my most active students?',
+    'Which students got alerts recently?',
+    'How many students are active today?',
+    'List students by engagement status',
+    'Which students need immediate attention?',
   ],
   school_admin: [
     'Dashboard summary',
@@ -43,6 +43,126 @@ const SUGGESTIONS: Record<string, string[]> = {
     'Is engagement improving?',
   ],
 };
+
+// Client-side intent handler — answers common teacher questions directly from dashboard data
+function tryClientSideAnswer(message: string, dashboardData: any): string | null {
+  if (!dashboardData) return null;
+  const students: any[] = dashboardData.students || [];
+  const alerts: any[] = dashboardData.recent_alerts || [];
+  const msg = message.toLowerCase().trim();
+
+  const studentLabel = (s: any) => {
+    const loc = [s.grade, s.section].filter(Boolean).join(' ');
+    return `**${s.full_name}**${loc ? ` (${loc})` : ''}`;
+  };
+
+  // --- greetings ---
+  if (/^(hi|hello|hey|good morning|good afternoon|good evening|sup|yo|howdy)[!.,\s]*$/i.test(msg)) {
+    const hour = new Date().getHours();
+    const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    return `${timeGreeting}!`;
+  }
+
+  // --- thanks ---
+  if (/^(thanks|thank you|thx|ty|cheers)[!.,\s]*$/i.test(msg)) {
+    return "You're welcome! Let me know if you need anything else.";
+  }
+
+  // --- help ---
+  if (msg === 'help' || msg === 'help me') {
+    return `Here's what I can help with:\n\n- **Who hasn't logged in this week?**\n- **Which students are at risk?**\n- **Show inactive students**\n- **Who are my most active students?**\n- **Which students got alerts recently?**\n- **How many students are active today?**\n- **List students by engagement status**\n- **Which students need immediate attention?**\n- **Dashboard summary**`;
+  }
+
+  // --- "who hasn't logged in this week / today / X days" ---
+  const loginMatch = msg.match(/(?:hasn'?t|haven'?t|not|didn'?t).*log(?:ged)?\s*in.*?(\d+)?\s*(day|week|today)?/);
+  const isLoginQuery = loginMatch || (msg.includes('log') && (msg.includes('week') || msg.includes('today') || msg.includes("hasn't") || msg.includes("haven't")));
+  if (isLoginQuery) {
+    const days = msg.includes('today') ? 0 : msg.includes('week') ? 7 : loginMatch?.[1] ? Number(loginMatch[1]) : 7;
+    const inactive = students
+      .filter((s) => s.auth_provider !== 'google' && (s.days_since_login === null || s.days_since_login > days))
+      .sort((a, b) => (b.days_since_login ?? 9999) - (a.days_since_login ?? 9999));
+    if (!inactive.length) return `All students have logged in within the last ${days === 0 ? 'today' : `${days} day${days > 1 ? 's' : ''}`}!`;
+    const rows = inactive.map((s) => `- ${studentLabel(s)} — ${s.days_since_login != null ? `${s.days_since_login} days ago` : 'never logged in'}`).join('\n');
+    return `**${inactive.length} student${inactive.length > 1 ? 's' : ''} haven't logged in${days === 7 ? ' this week' : days === 0 ? ' today' : ` in ${days} days`}:**\n\n${rows}`;
+  }
+
+  // --- at-risk students ---
+  if (msg.includes('at risk') || msg.includes('at-risk')) {
+    const atRisk = students.filter((s) => s.engagement_status === 'at_risk');
+    if (!atRisk.length) return 'No students are currently marked as at-risk.';
+    const rows = atRisk.map((s) => `- ${studentLabel(s)} — last login: ${s.days_since_login != null ? `${s.days_since_login} days ago` : 'never'}`).join('\n');
+    return `**${atRisk.length} at-risk student${atRisk.length > 1 ? 's' : ''}:**\n\n${rows}`;
+  }
+
+  // --- inactive students ---
+  if (msg.includes('inactive')) {
+    const inactive = students.filter((s) => s.engagement_status === 'inactive' || s.engagement_status === 'low_engagement');
+    if (!inactive.length) return 'No inactive students found.';
+    const rows = inactive.map((s) => `- ${studentLabel(s)} — ${s.days_since_login != null ? `${s.days_since_login} days since login` : 'never logged in'}`).join('\n');
+    return `**${inactive.length} inactive/low-engagement student${inactive.length > 1 ? 's' : ''}:**\n\n${rows}`;
+  }
+
+  // --- most active / top active students ---
+  if (msg.includes('most active') || msg.includes('top active') || (msg.includes('active') && msg.includes('student'))) {
+    const active = students
+      .filter((s) => s.engagement_status === 'active')
+      .sort((a, b) => (a.days_since_login ?? 999) - (b.days_since_login ?? 999))
+      .slice(0, 15);
+    if (!active.length) return 'No students are currently marked as active.';
+    const rows = active.map((s) => `- ${studentLabel(s)} — logged in ${s.days_since_login === 0 ? 'today' : `${s.days_since_login} days ago`}`).join('\n');
+    return `**Top ${active.length} active student${active.length > 1 ? 's' : ''}:**\n\n${rows}`;
+  }
+
+  // --- how many active today ---
+  if (msg.includes('how many') && msg.includes('active') && msg.includes('today')) {
+    const today = students.filter((s) => s.days_since_login === 0).length;
+    return `**${today}** student${today !== 1 ? 's' : ''} logged in today out of ${students.length} total.`;
+  }
+
+  // --- students by engagement status ---
+  if (msg.includes('by engagement') || msg.includes('engagement status') || msg.includes('list student')) {
+    const groups: Record<string, any[]> = {};
+    for (const s of students) {
+      const key = s.engagement_status || 'unknown';
+      (groups[key] = groups[key] || []).push(s);
+    }
+    const order = ['active', 'at_risk', 'low_engagement', 'inactive', 'unknown'];
+    const lines = order.filter((k) => groups[k]?.length).map((k) => {
+      const label = k.replace(/_/g, ' ');
+      const names = groups[k].map((s) => `${s.full_name}`).join(', ');
+      return `**${label.charAt(0).toUpperCase() + label.slice(1)} (${groups[k].length}):** ${names}`;
+    });
+    return lines.join('\n\n');
+  }
+
+  // --- recent alerts ---
+  if (msg.includes('alert')) {
+    if (!alerts.length) return 'No recent alerts found.';
+    const studentMap = Object.fromEntries(students.map((s) => [s.student_id, s]));
+    const rows = alerts.slice(0, 10).map((a) => {
+      const s = studentMap[a.student_id];
+      const name = s ? studentLabel(s) : `Student #${a.student_id}`;
+      return `- ${name} — ${a.reason ?? a.alert_type} (${new Date(a.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })})`;
+    });
+    return `**${alerts.length} recent alert${alerts.length > 1 ? 's' : ''}:**\n\n${rows.join('\n')}`;
+  }
+
+  // --- immediate attention / need help ---
+  if (msg.includes('immediate attention') || msg.includes('need help') || msg.includes('needs attention')) {
+    const urgent = students.filter((s) => s.engagement_status === 'at_risk' || s.engagement_status === 'inactive');
+    if (!urgent.length) return 'No students currently need immediate attention.';
+    const rows = urgent.map((s) => `- ${studentLabel(s)} — ${s.engagement_status.replace(/_/g, ' ')} | ${s.days_since_login != null ? `${s.days_since_login} days since login` : 'never logged in'}`).join('\n');
+    return `**${urgent.length} student${urgent.length > 1 ? 's' : ''} needing attention:**\n\n${rows}`;
+  }
+
+  // --- dashboard summary / overview ---
+  if (msg.includes('summary') || msg.includes('overview') || msg.includes('dashboard')) {
+    const d = dashboardData;
+    return `**Dashboard Summary**\n\n- **Total students:** ${d.total_students}\n- **Active:** ${d.active_students}\n- **At risk:** ${d.at_risk_students}\n- **Inactive:** ${d.inactive_students}\n- **Active sessions now:** ${d.active_sessions ?? 0}`;
+  }
+
+  return null;
+}
 
 const CLASS_OPTIONS = ['6', '7', '8', '9'];
 const EXAM_TYPE_OPTIONS = [
@@ -109,15 +229,32 @@ const ChatBot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Send only lightweight summary data, not full student/teacher arrays
+      // Answer locally if possible — no API call needed
+      const localAnswer = tryClientSideAnswer(text.trim(), dashboardData);
+      if (localAnswer) {
+        setMessages((prev) => [...prev, { id: Date.now() + 1, text: localAnswer, sender: 'bot', timestamp: new Date() }]);
+        return;
+      }
+
       let trimmedData: any = undefined;
       if (dashboardData) {
         const { all_students, all_teachers, students, teachers, recent_alerts, ...summary } = dashboardData;
-        // Keep only top 30 students for search/at-risk queries
-        const topStudents = (all_students || students || [])
-          .filter((s: any) => s.engagement_status !== 'active')
-          .slice(0, 30);
-        trimmedData = { ...summary, students: topStudents };
+        const allStudents = (all_students || students || []);
+        // Send all students but only essential fields so the bot can answer about any student by name
+        const studentSummaries = allStudents.map((s: any) => ({
+          student_id: s.student_id,
+          full_name: s.full_name,
+          grade: s.grade,
+          section: s.section,
+          days_since_login: s.days_since_login,
+          engagement_status: s.engagement_status,
+          auth_provider: s.auth_provider,
+        }));
+        trimmedData = {
+          ...summary,
+          students: studentSummaries,
+          recent_alerts: (recent_alerts || []).slice(0, 15),
+        };
       }
 
       // Send last 6 messages as history for follow-up context

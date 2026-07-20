@@ -1,25 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StudentEngagementSummary, EngagementStatus } from '../types';
+import { dashboardAPI } from '../services/api';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 
-// Dark theme palette
 const COLORS = {
-  bg: '#0B1120',
-  cardBg: '#111827',
-  cardBorder: '#1E293B',
-  rowHover: '#1E293B',
-  headerBg: '#0F172A',
-  textPrimary: '#F1F5F9',
-  textSecondary: '#94A3B8',
+  bg: '#EDE9FE',
+  cardBg: '#FFFFFF',
+  cardBorder: '#E2E8F0',
+  rowHover: '#F5F3FF',
+  headerBg: '#F5F3FF',
+  textPrimary: '#0F172A',
+  textSecondary: '#475569',
   textMuted: '#64748B',
   green: '#10B981',
   blue: '#3B82F6',
-  purple: '#8B5CF6',
+  purple: '#7C3AED',
   amber: '#F59E0B',
   rose: '#F43F5E',
-  teal: '#14B8A6',
-  inputBorder: '#334155',
+  teal: '#7C3AED',
+  inputBorder: '#E2E8F0',
 };
 
 interface StudentTableProps {
@@ -29,6 +29,7 @@ interface StudentTableProps {
   onViewDetails: (studentId: number) => void;
   selectedIds?: Set<number>;
   onSelectionChange?: (selectedIds: Set<number>) => void;
+  usernameByStudentId?: Map<number, string>;
 }
 
 const StudentTable: React.FC<StudentTableProps> = ({
@@ -38,6 +39,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
   onViewDetails,
   selectedIds,
   onSelectionChange,
+  usernameByStudentId,
 }) => {
   const [filter, setFilter] = useState<'all' | EngagementStatus>('all');
   const [sortBy, setSortBy] = useState<'name' | 'lastLogin' | 'sessions' | 'highEngagement' | 'lowEngagement'>('name');
@@ -191,43 +193,6 @@ const StudentTable: React.FC<StudentTableProps> = ({
           justifyContent: 'space-between',
         }}
       >
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {filterOptions.map((opt) => {
-            const isActive = filter === opt.value;
-            return (
-              <button
-                key={opt.value}
-                onClick={() => setFilter(opt.value)}
-                style={{
-                  padding: '6px 16px',
-                  borderRadius: '99px',
-                  border: isActive ? `1.5px solid ${opt.color}` : '1.5px solid transparent',
-                  background: isActive ? `${opt.color}15` : 'rgba(100,116,139,0.08)',
-                  color: isActive ? opt.color : COLORS.textMuted,
-                  fontSize: '13px',
-                  fontWeight: isActive ? 700 : 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  fontFamily: FONT,
-                  boxShadow: isActive ? `0 0 12px ${opt.color}25` : 'none',
-                }}
-              >
-                {opt.label}
-                <span
-                  style={{
-                    marginLeft: '6px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    opacity: 0.7,
-                  }}
-                >
-                  {opt.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {/* Class Filter */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -315,22 +280,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: COLORS.headerBg }}>
-              {selectable && (
-                <th style={{ padding: '12px 16px', textAlign: 'left', width: '44px' }}>
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={handleSelectAll}
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      accentColor: COLORS.teal,
-                      cursor: 'pointer',
-                    }}
-                  />
-                </th>
-              )}
-              {['Student', 'Grade', 'Last Login', 'Sessions', 'Status', ''].map((header) => (
+              {['Student', 'Grade', ''].map((header) => (
                 <th
                   key={header || 'actions'}
                   style={{
@@ -359,7 +309,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                   key={student.student_id}
                   style={{
                     borderTop: `1px solid ${COLORS.cardBorder}`,
-                    background: isSelected ? 'rgba(20,184,166,0.08)' : COLORS.cardBg,
+                    background: isSelected ? 'rgba(124,58,237,0.08)' : COLORS.cardBg,
                     transition: 'background 0.15s',
                     cursor: 'default',
                     animation: `entrance-stagger 0.3s ease-out ${idx * 0.02}s both`,
@@ -371,22 +321,6 @@ const StudentTable: React.FC<StudentTableProps> = ({
                     if (!isSelected) e.currentTarget.style.background = COLORS.cardBg;
                   }}
                 >
-                  {selectable && (
-                    <td style={{ padding: '14px 16px' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds?.has(student.student_id) || false}
-                        onChange={() => handleToggle(student.student_id)}
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          accentColor: COLORS.teal,
-                          cursor: 'pointer',
-                        }}
-                      />
-                    </td>
-                  )}
-
                   {/* Student name */}
                   <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -396,7 +330,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                           width: '8px',
                           height: '8px',
                           borderRadius: '50%',
-                          background: student.is_currently_active ? COLORS.green : '#475569',
+                          background: student.is_currently_active ? COLORS.green : '#CBD5E1',
                           flexShrink: 0,
                           boxShadow: student.is_currently_active
                             ? `0 0 8px rgba(16,185,129,0.5)`
@@ -461,86 +395,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                     {student.grade || '-'} {student.section || ''}
                   </td>
 
-                  {/* Last Login */}
-                  <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                    <div style={{ fontSize: '14px', color: COLORS.textPrimary }}>
-                      {student.last_login
-                        ? new Date(student.last_login).toLocaleDateString()
-                        : 'Never'}
-                    </div>
-                    {student.days_since_login !== null &&
-                      student.days_since_login !== undefined && (
-                        <div
-                          style={{
-                            fontSize: '12px',
-                            color: COLORS.textMuted,
-                            marginTop: '1px',
-                          }}
-                        >
-                          {student.days_since_login === 0
-                            ? 'Today'
-                            : `${student.days_since_login}d ago`}
-                        </div>
-                      )}
-                  </td>
-
-                  {/* Sessions */}
-                  <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: COLORS.textPrimary }}>
-                      {student.sessions_this_week}
-                      <span style={{ fontWeight: 400, color: COLORS.textMuted }}>/wk</span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: COLORS.textMuted,
-                        marginTop: '1px',
-                      }}
-                    >
-                      {student.total_sessions} total
-                    </div>
-                  </td>
-
-                  {/* Status */}
-                  <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: '4px 12px',
-                        borderRadius: '99px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        color: status.color,
-                        background: status.bg,
-                        border: `1px solid ${status.border}`,
-                        letterSpacing: '0.02em',
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          background: status.color,
-                          marginRight: '6px',
-                        }}
-                      />
-                      {status.label}
-                    </span>
-                    {student.has_active_alert && (
-                      <div
-                        style={{
-                          marginTop: '4px',
-                          fontSize: '11px',
-                          color: COLORS.rose,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Alert active
-                      </div>
-                    )}
-                  </td>
+                  {/* Hours in App column intentionally hidden from UI; logic kept in HoursInAppCell below. */}
 
                   {/* Actions */}
                   <td style={{ padding: '14px 20px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -550,20 +405,6 @@ const StudentTable: React.FC<StudentTableProps> = ({
                         color={COLORS.blue}
                         onClick={() => onViewDetails(student.student_id)}
                       />
-                      {student.engagement_status !== EngagementStatus.ACTIVE && (
-                        <DarkActionButton
-                          label="Alert"
-                          color={COLORS.amber}
-                          onClick={() => onSendAlert(student.student_id)}
-                        />
-                      )}
-                      {onSendChallenge && (
-                        <DarkActionButton
-                          label="Challenge"
-                          color={COLORS.purple}
-                          onClick={() => onSendChallenge(student.student_id)}
-                        />
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -586,7 +427,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
             width="40"
             height="40"
             fill="none"
-            stroke={COLORS.inputBorder}
+            stroke={COLORS.cardBorder}
             strokeWidth="1.5"
             viewBox="0 0 24 24"
             style={{ margin: '0 auto 12px' }}
@@ -602,6 +443,58 @@ const StudentTable: React.FC<StudentTableProps> = ({
       )}
     </div>
   );
+};
+
+const fmtHours = (sec: number) => {
+  if (sec <= 0) return '—';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
+
+// Cache resolved totals across renders/sorts so we don't refetch a username already seen.
+const hoursInAppCache = new Map<string, number>();
+
+const HoursInAppCell: React.FC<{ username?: string }> = ({ username }) => {
+  const [seconds, setSeconds] = useState<number | null>(
+    username && hoursInAppCache.has(username) ? hoursInAppCache.get(username)! : null
+  );
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!username || hoursInAppCache.has(username)) return;
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        observer.disconnect();
+        setLoading(true);
+        dashboardAPI
+          .getUserLoginLogs(username, 500)
+          .then((logs) => {
+            const total = (logs?.items ?? []).reduce(
+              (s, d) => s + Number(d.total_time_seconds ?? 0),
+              0
+            );
+            hoursInAppCache.set(username, total);
+            setSeconds(total);
+          })
+          .catch(() => {
+            setSeconds(0);
+          })
+          .finally(() => setLoading(false));
+      }
+    }, { threshold: 0.1 });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [username]);
+
+  if (!username) return <span>—</span>;
+  if (seconds !== null) return <span>{fmtHours(seconds)}</span>;
+  return <span ref={ref}>{loading ? '…' : ''}</span>;
 };
 
 /* Compact dark action button with colored border */

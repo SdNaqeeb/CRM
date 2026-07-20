@@ -1,0 +1,179 @@
+SmartLearners KPI Planning — All 13 Use Cases
+1. Aptitude Test Checking — Admission Cell
+PARTIALLY COVERED
+
+Existing Assets in CRM
+
+examAPI.getExamAttempts() — fetches student attempts with score, percentage, grade
+ExamAttemptItem — student, class, section, score, max_score, percentage
+computeExamSummaryStats() — avg, median, pass rate
+computeScoreBands() — distributes scores across 5 bands
+WeeklyExamResults.tsx — ranked student results table
+Explanation
+The admission aptitude test is a one-time upload-and-grade flow. The CRM already has the full exam attempt pipeline — upload, fetch results, compute averages and pass rates. computeScoreBands() can immediately show how many candidates fell in each score bracket. computeExamSummaryStats() gives the batch average and median. The only addition needed is a dedicated "Admission" exam type tag so these results don't mix with regular CT exams in the teacher dashboard.
+
+2. CT & AI Worksheet Assignment and Checking
+COVERED
+
+Existing Assets in CRM
+
+quizAPI.getHomeworks() — all homework/CT assignments created by teacher
+quizAPI.getSubmissions() — student submissions per homework
+QuizHomeworkItem — title, due_date, total_submissions, subject, chapters
+QuizSubmissionItem — student, score, analysis, prediction, graph_data
+WeeklyExamResults.tsx — submission table with score color coding
+ScheduledAssignmentsPanel.tsx — tracks submission count per assignment
+Explanation
+Every CT cycle maps directly to a homework item. getHomeworks() lists all CT worksheets the teacher has created, and getSubmissions() fetches how many students submitted and what scores they got. The KPIs here — submission rate, average concept score per student, correction turnaround — are all derivable from QuizSubmissionItem.graph_data and analysis. The ScheduledAssignmentsPanel already shows submitted vs total counts, which is the core CT KPI. Parent PDF reports are already supported via the shareable report flow.
+
+3. Step Up Home Practice — Remedial Students
+COVERED
+
+Existing Assets in CRM
+
+computeStudentTrends() — computes first-third avg, last-third avg, improvement %, engagement %
+detectAtRisk() / detectAtRiskForTeacher() — identifies students already flagged as low engagement
+EngagementStatus enum — ACTIVE, AT_RISK, LOW_ENGAGEMENT, INACTIVE
+StudentTrackGrid.tsx — shows on-track / slightly-off / completely-off status per student
+getStudentActivity() — individual student activity timeline with scores
+ScatterPlot.tsx — "Needs Intervention" quadrant directly maps to remedial students
+Explanation
+Step Up students are essentially the AT_RISK and LOW_ENGAGEMENT cohort already identified by detectAtRisk(). Their home practice completion rate maps to ActivityEntry counts over time. computeStudentTrends() already calculates whether a student's scores are improving or declining across attempts — this is the core remedial KPI. The ScatterPlot's "Needs Intervention" quadrant (declining score + low app use) is exactly the flag to surface students not responding to remedial practice. Weekly review meetings can be data-backed by pulling getStudentActivity() for each Step Up student.
+
+4. Interactive Practice — Special Needs Students
+PARTIALLY COVERED
+
+Existing Assets in CRM
+
+getStudentActivity() — individual activity timeline with timestamps and scores
+ActivityEntry — activity_type, score, max_score, percentage, timestamp
+EngagementTracking.tsx — streak tracking, daily sessions, compliance %
+StudentProfile — grade, section, last_login, sessions, modules_completed
+getStudentStatus() — current engagement status per student
+Explanation
+Special needs students require low-pressure, self-paced tracking. The CRM's EngagementTracking.tsx already handles daily session counts, streaks, and target-met status — which directly maps to participation rate for this cohort. ActivityEntry records every attempt including time spent, so repeat attempts on the same module can be counted from timestamp patterns. The key gap is that there's no attempt_count or repeat_attempts field in current types — but this can be derived by counting duplicate activity_type + title entries per student in the activity timeline. Termly review metrics are covered by date-filtering getStudentActivity().
+
+5. Notebook & Teacher Correction Quality Audit
+NOT COVERED
+
+Existing Assets in CRM
+
+getTeacherActivity() — teacher activity timeline with activity types
+ActivityEntry — tracks teacher activities with type badges
+ActivityFeed.tsx — displays activity with daily grouping and role badges
+SchoolDashboardData — teachers list with school-wide aggregates
+getSchoolActivity() — school-wide activity overview across all teachers
+Explanation
+The audit cycle (monthly, HOD-driven) needs two things: a sampling trigger and a quality score. getSchoolActivity() already aggregates teacher-level activity, so HODs can see which teachers have uploaded corrections and when. The compliance rate (did the teacher upload notebooks this month?) is derivable from ActivityEntry filtered by teacher role and correction activity type. The genuine gap is a quality score rubric — the CRM has no field for "correction quality rating." The audit upload infrastructure exists conceptually via TimelineUpload.tsx but would need an HOD-facing quality score input to close the loop. Fundamentally, the audit entity itself — who audited whom, what criteria, what score — does not exist in the data model.
+
+6. Revision Before Exams — Jul / Sep / Dec / Feb
+COVERED
+
+Existing Assets in CRM
+
+computeExamSummaryStats() — avg, median, pass rate per exam
+computeSectionAverages() — section-wise averages before and after revision
+getSummerComparisonData() — before/after comparison with gain calculation
+subjectStats() — before, after, gain, % improved per subject
+GroupedBarChart in AnalyticsCharts.tsx — side-by-side before/after bars
+computeStudentTrends() — first-third vs last-third improvement across attempts
+Explanation
+This is the most directly covered use case in the entire CRM. getSummerComparisonData() was literally built for a before/after comparison — the same pattern applies to all four revision windows (Jul, Sep, Dec, Feb). Each window becomes a "before exam" snapshot and a "post-revision" snapshot. subjectStats() computes gain and % improved per subject automatically. GroupedBarChart renders the before/after visually. The only thing needed is a date-window tag on each exam to mark it as "pre-revision" or "post-revision" so the comparison logic knows which two exams to pair.
+
+7. Sample Question Paper Checking — Grade 10 & 12
+COVERED
+
+Existing Assets in CRM
+
+examAPI.getMockExams() — fetches mock/sample exams by teacher
+examAPI.getMockExamResults() — detailed results per student per exam
+MockExamAnalysis.tsx — full analytics: programme KPIs, score bands, section averages, box plots
+computeProgrammeKPIs() — total exams, submissions, weighted average score
+computeNeedsReview() — students below pass threshold (pre-board risk flag)
+computeStudentsAppeared() — unique students by subject/class/section
+computeNeverAppeared() — students who haven't attempted (critical for board prep)
+Explanation
+Sample paper checking for Grades 10 & 12 is the exact scenario MockExamAnalysis.tsx was designed for. Weekly sample paper cycles map to individual mock exam entries. computeNeverAppeared() is the most critical KPI here — any Grade 10/12 student who hasn't attempted a sample paper before boards is an immediate intervention flag. computeNeedsReview() surfaces students below the pass threshold each week. computeProgrammeKPIs() gives the rolling weighted average across all sample paper rounds. Parent reports are already supported via the existing PDF-shareable flow.
+
+8. Competitive Exam Prep — JEE / NEET / Olympiad
+PARTIALLY COVERED
+
+Existing Assets in CRM
+
+JEEExamResults.tsx — per-subject scores (Physics, Chemistry, Maths), ranking, accuracy %
+computeSubjectBreakdown() — score distribution by subject with box plot stats
+inferSubject() — auto-detects Physics/Maths/Science from chapter names
+inferClass() — auto-detects Class 10/12
+getTestPrepBySchoolCode() / getTestPrepByUsernameSchoolCode() — test prep data with prediction and remedial plan
+TestPrepItem — student, prediction, analysis, remedial_plan, graph_data
+Explanation
+The CRM already has a dedicated JEE results view and a test prep pipeline with AI-generated predictions and remedial plans per student. TestPrepItem.prediction and remedial_plan are exactly the data points needed for monthly progress review meetings with career counsellors. computeSubjectBreakdown() gives Physics/Chemistry/Maths score distributions across the competitive prep cohort. The Olympiad use case (Grade 6–12) needs subject detection via inferSubject() to separate CBSE chapters from olympiad-level content. The main addition needed is a "competitive cohort" group tag so these students' scores are tracked separately from their regular CBSE scores.
+
+9. Enrichment Practice — High Achievers
+COVERED
+
+Existing Assets in CRM
+
+computeScoreBands() — 90-100 band already isolates top performers
+computeBoxStats() — Q3 and max identify students consistently in top quartile
+computeStudentTrends() — tracks whether high achievers are improving or plateauing
+flagFastPerfect() — validates enrichment engagement (rules out rushed perfect scores)
+StudentTrackGrid.tsx — on-track status with quiz and mock exam averages
+ScatterPlot.tsx — "App Drove" quadrant (improving + high app use) is the enrichment success metric
+Explanation
+Identifying high achievers is already solved — filter computeScoreBands() for the 90-100 band across June-July CT data and the cohort defines itself. Quarterly enrichment cohort review maps to running computeStudentTrends() on this cohort every quarter and checking whether their last-third average is still above their first-third. The "App Drove" quadrant in ScatterPlot.tsx shows which enrichment students are actively using the platform and improving — the ideal KPI for competition team selection. flagFastPerfect() adds a validation layer to ensure high scores aren't from rushed attempts.
+
+10. Post-Holiday Concept Catch-Up — Aug / Oct / Jan
+COVERED
+
+Existing Assets in CRM
+
+getSummerComparisonData() — post-summer diagnostic with before/after structure
+sectionSummerComparison.json — pre-loaded Class 10 summer comparison dataset
+subjectStats() — gain and % improved per subject
+computeNeedsReview() — flags students still below threshold after catch-up
+computeNeverAppeared() — students who didn't attempt the diagnostic at all
+GroupedBarChart — before/after visual comparison
+Explanation
+The post-summer catch-up is already implemented as the summer comparison feature. The same pattern (diagnostic → gap-fill modules → re-test) applies for the Diwali (Oct) and winter break (Jan) catch-ups. computeNeverAppeared() catches students who skipped the diagnostic entirely — a critical non-completion KPI. computeNeedsReview() after the catch-up module shows who still needs further intervention. Year-on-year comparison requires storing the catch-up results with a term/year tag so they can be pulled for longitudinal comparison — that tag is the only missing piece.
+
+11. Data-Driven Lesson Planning Audit
+NOT COVERED
+
+Existing Assets in CRM
+
+computeSectionAverages() — which sections/concepts the class struggled with per exam
+ExamAttemptItem — question-wise data available via attempt records
+getTeacherExams() — all exams created by teacher with class context
+computeSectionSubjectAverages() — cross-tabulation of section vs subject weak areas
+ActivityFeed.tsx — teacher activity timeline showing what was assigned after an exam
+Explanation
+The question-wise CT analysis (the input) is already computable. The gap is tracking the output — whether the teacher actually re-taught the weak concept before advancing. The KPI requires comparing the timestamp of a weak-concept flag (exam date) against the next assignment on that same chapter in ActivityEntry. This correlation logic doesn't exist anywhere in the CRM. Additionally, there's no "lesson plan" entity in the data model at all — lesson plans are created, modified, and tracked outside the platform entirely. Until lesson plans are brought into the CRM as a data entity, this KPI cannot be computed end-to-end.
+
+12. Teacher Aptitude Assessment
+PARTIALLY COVERED
+
+Existing Assets in CRM
+
+examAPI.getTeacherExams() — exam infrastructure fully reusable for teacher assessments
+examAPI.getExamAttempts() — attempt results with score, percentage, grade
+computeExamSummaryStats() — can produce aggregate-only outputs (avg, median, pass rate)
+UserRole enum — TEACHER role already exists for scoping
+SchoolDashboardData — teachers list for HR-level view
+Explanation
+The entire exam pipeline (upload, attempt, result) can be reused for teacher aptitude tests during recruitment. computeExamSummaryStats() can produce aggregate-only outputs for the HR dashboard without exposing individual teacher scores — matching the confidentiality policy in the roadmap. The critical gap is access control: there's no role-gated result view where individual scores are hidden from non-HR viewers. A filter layer on ExamAttemptItem — replacing individual names with "Candidate A/B/C" for non-HR roles — would cover the confidentiality requirement. Without this, using the existing exam pipeline for HR would violate the roadmap's own policy of keeping individual results confidential.
+
+13. PTM Reports Analysis — Sep / Jan / Mar
+PARTIALLY COVERED
+
+Existing Assets in CRM
+
+getStudentSummary() — full individual student profile with engagement metrics
+getStudentActivity() — activity timeline filterable by date range
+computeStudentTrends() — improvement trajectory (first vs last third average)
+StudentDetailModal.tsx — full student profile view already assembled
+computeNeedsReview() — weak areas and below-threshold subjects per student
+computeSectionAverages() — subject-wise performance summary
+TeacherDashboardData — student list with engagement status
+Explanation
+PTM reports need three things per student: progress since last PTM, current weak areas, and engagement status. All three are computable today. computeStudentTrends() gives the progress trajectory. computeNeedsReview() lists weak chapters. getStudentStatus() + EngagementStatus gives the engagement label. StudentDetailModal.tsx already assembles most of this into a single view. The gap is date-range scoping — there's no way to say "show data only from Sep to Jan" per PTM cycle. Without cycle-scoped filtering, the PTM report shows the full-year history rather than the specific term being reviewed, making it less actionable for the teacher during the meeting.

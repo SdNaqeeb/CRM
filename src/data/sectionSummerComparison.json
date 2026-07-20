@@ -1,0 +1,230 @@
+{
+  "generated_at": "2026-06-20T06:59:55.967Z",
+  "sections": [
+    {
+      "section": "A",
+      "maths": {
+        "before": 77.3,
+        "beforeN": 21,
+        "after": 78.3,
+        "afterN": 34
+      },
+      "science": {
+        "before": 79.5,
+        "beforeN": 23,
+        "after": 85.4,
+        "afterN": 34
+      }
+    },
+    {
+      "section": "B",
+      "maths": {
+        "before": 79.4,
+        "beforeN": 20,
+        "after": 83.7,
+        "afterN": 29
+      },
+      "science": {
+        "before": 80.5,
+        "beforeN": 15,
+        "after": 81.1,
+        "afterN": 31
+      }
+    },
+    {
+      "section": "C",
+      "maths": {
+        "before": 66,
+        "beforeN": 32,
+        "after": 83.8,
+        "afterN": 33
+      },
+      "science": {
+        "before": 79.6,
+        "beforeN": 18,
+        "after": 84.1,
+        "afterN": 32
+      }
+    },
+    {
+      "section": "D",
+      "maths": {
+        "before": 68.8,
+        "beforeN": 33,
+        "after": 74.7,
+        "afterN": 34
+      },
+      "science": {
+        "before": 83.4,
+        "beforeN": 33,
+        "after": 79.9,
+        "afterN": 36
+      }
+    },
+    {
+      "section": "E",
+      "maths": {
+        "before": 74.1,
+        "beforeN": 28,
+        "after": 74.1,
+        "afterN": 32
+      },
+      "science": {
+        "before": 69.2,
+        "beforeN": 31,
+        "after": 72.1,
+        "afterN": 29
+      }
+    },
+    {
+      "section": "F",
+      "maths": {
+        "before": 65.9,
+        "beforeN": 28,
+        "after": 77,
+        "afterN": 32
+      },
+      "science": {
+        "before": 76.1,
+        "beforeN": 29,
+        "after": 79.7,
+        "afterN": 35
+      }
+    },
+    {
+      "section": "G",
+      "maths": {
+        "before": 72,
+        "beforeN": 27,
+        "after": 75.3,
+        "afterN": 33
+      },
+      "science": {
+        "before": 69.9,
+        "beforeN": 32,
+        "after": 81.6,
+        "afterN": 31
+      }
+    },
+    {
+      "section": "H",
+      "maths": {
+        "before": 76.9,
+        "beforeN": 31,
+        "after": 78.5,
+        "afterN": 33
+      },
+      "science": {
+        "before": 74.4,
+        "beforeN": 30,
+        "after": 85.1,
+        "afterN": 28
+      }
+    },
+    {
+      "section": "I",
+      "maths": {
+        "before": 71.7,
+        "beforeN": 27,
+        "after": 68.4,
+        "afterN": 31
+      },
+      "science": {
+        "before": 68,
+        "beforeN": 19,
+        "after": 71.3,
+        "afterN": 31
+      }
+    },
+    {
+      "section": "J",
+      "maths": {
+        "before": 77.3,
+        "beforeN": 25,
+        "after": 79.4,
+        "afterN": 33
+      },
+      "science": {
+        "before": 84.7,
+        "beforeN": 23,
+        "after": 83.9,
+        "afterN": 32
+      }
+    },
+    {
+      "section": "K",
+      "maths": {
+        "before": 40,
+        "beforeN": 25,
+        "after": 59.5,
+        "afterN": 6
+      },
+      "science": {
+        "before": 52.6,
+        "beforeN": 25,
+        "after": 48.9,
+        "afterN": 14
+      }
+    },
+    {
+      "section": "L",
+      "maths": {
+        "before": 73.6,
+        "beforeN": 32,
+        "after": 76,
+        "afterN": 33
+      },
+      "science": {
+        "before": 82.2,
+        "beforeN": 33,
+        "after": 82.3,
+        "afterN": 32
+      }
+    },
+    {
+      "section": "M",
+      "maths": {
+        "before": 72,
+        "beforeN": 26,
+        "after": 76.8,
+        "afterN": 34
+      },
+      "science": {
+        "before": 73.6,
+        "beforeN": 20,
+        "after": 78.7,
+        "afterN": 36
+      }
+    },
+    {
+      "section": "N",
+      "maths": {
+        "before": 71.7,
+        "beforeN": 27,
+        "after": 80.4,
+        "afterN": 31
+      },
+      "science": {
+        "before": 74.4,
+        "beforeN": 25,
+        "after": 80.9,
+        "afterN": 27
+      }
+    },
+    {
+      "section": "O",
+      "maths": {
+        "before": null,
+        "beforeN": 0,
+        "after": null,
+        "afterN": 0
+      },
+      "science": {
+        "before": 76.3,
+        "beforeN": 30,
+        "after": 81.6,
+        "afterN": 30
+      }
+    }
+  ]
+}

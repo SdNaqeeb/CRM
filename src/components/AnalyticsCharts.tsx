@@ -30,15 +30,15 @@ const DEFAULT_BAR_COLORS = [
 ];
 
 const THEME = {
-  cardBg: '#111827',
-  cardBorder: '#1E293B',
-  cardBorderHover: '#334155',
-  textPrimary: '#F1F5F9',
-  textSecondary: '#94A3B8',
-  gridLine: '#1E293B',
-  tooltipBg: '#1E293B',
-  tooltipBorder: '#334155',
-  tooltipText: '#F1F5F9',
+  cardBg: '#FFFFFF',
+  cardBorder: '#E2E8F0',
+  cardBorderHover: '#CBD5E1',
+  textPrimary: '#0F172A',
+  textSecondary: '#64748B',
+  gridLine: '#E2E8F0',
+  tooltipBg: '#FFFFFF',
+  tooltipBorder: '#E2E8F0',
+  tooltipText: '#0F172A',
 };
 
 /* ────────────────────────────────────────────
@@ -71,10 +71,11 @@ const ChartCard: React.FC<{
       <h3
         style={{
           margin: '0 0 16px',
-          fontSize: 15,
+          fontSize: 12,
           fontWeight: 700,
           color: THEME.textPrimary,
-          letterSpacing: '-0.01em',
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
         }}
       >
         {title}
@@ -281,8 +282,7 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     [legend2]: d.value2,
   }));
 
-  // For single data point, limit bar width to prevent overly wide bars
-  const maxBarSize = data.length === 1 ? 80 : undefined;
+  const maxBarSize = 40;
 
   const containerWidth = minBarSlotWidth
     ? Math.max(minBarSlotWidth * data.length + 80, 400)
@@ -306,12 +306,8 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
 
   const chart = (
     <ResponsiveContainer width="100%" height={height}>
-      <RBarChart data={chartData} margin={{ top: 12, right: 16, bottom: 8, left: 8 }}>
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke={THEME.gridLine}
-          vertical={false}
-        />
+      <RBarChart data={chartData} margin={{ top: 12, right: 16, bottom: 8, left: 8 }} barGap={1}>
+        <CartesianGrid strokeDasharray="3 3" stroke={THEME.gridLine} vertical={false} />
         <XAxis
           dataKey="name"
           tick={showXAxisLabels ? { fill: THEME.textSecondary, fontSize: 12, fontFamily: FONT_BODY } : false}
@@ -329,22 +325,8 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
           cursor={{ fill: 'rgba(255,255,255,0.03)' }}
           wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
         />
-        <Bar
-          dataKey={legend1}
-          fill={color1}
-          radius={[4, 4, 0, 0]}
-          animationDuration={800}
-          animationEasing="ease-out"
-          maxBarSize={maxBarSize}
-        />
-        <Bar
-          dataKey={legend2}
-          fill={color2}
-          radius={[4, 4, 0, 0]}
-          animationDuration={800}
-          animationEasing="ease-out"
-          maxBarSize={maxBarSize}
-        />
+        <Bar dataKey={legend1} fill={color1} radius={[4, 4, 0, 0]} animationDuration={800} animationEasing="ease-out" maxBarSize={maxBarSize} />
+        <Bar dataKey={legend2} fill={color2} radius={[4, 4, 0, 0]} animationDuration={800} animationEasing="ease-out" maxBarSize={maxBarSize} />
       </RBarChart>
     </ResponsiveContainer>
   );
@@ -375,6 +357,10 @@ interface StackedBarChartProps {
   xDataKey?: string;
   xTickFormatter?: (value: string | number) => string;
   tooltipLabelFormatter?: (value: string | number) => string;
+  showXAxisLabels?: boolean;
+  maxBarSize?: number;
+  barCategoryGap?: string | number;
+  horizontal?: boolean;
 }
 
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({
@@ -385,6 +371,10 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
   xDataKey = 'label',
   xTickFormatter,
   tooltipLabelFormatter,
+  showXAxisLabels = false,
+  maxBarSize = 40,
+  barCategoryGap = '10%',
+  horizontal = false,
 }) => {
   if (!data.length) {
     return (
@@ -394,47 +384,48 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
     );
   }
 
-  // For single data point, limit bar width to prevent overly wide bars
-  const maxBarSize = data.length === 1 ? 80 : undefined;
-
   return (
     <ChartCard title={title}>
       <ResponsiveContainer width="100%" height={height}>
-        <RBarChart data={data} margin={{ top: 12, right: 16, bottom: 8, left: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={THEME.gridLine} vertical={false} />
-          <XAxis
-            dataKey={xDataKey}
-            tick={false}
-            axisLine={false}
-            tickLine={false}
-            height={0}
-          />
-          <YAxis
-            tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }}
-            axisLine={false}
-            tickLine={false}
-          />
+        <RBarChart
+          data={data}
+          layout={horizontal ? 'vertical' : 'horizontal'}
+          margin={{ top: 12, right: 16, bottom: horizontal ? 8 : 8, left: horizontal ? 8 : 8 }}
+          barCategoryGap={barCategoryGap}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke={THEME.gridLine} vertical={horizontal} horizontal={!horizontal} />
+          {horizontal ? (
+            <>
+              <XAxis type="number" tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey={xDataKey} tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_BODY }} axisLine={false} tickLine={false} width={32} tickFormatter={xTickFormatter} />
+            </>
+          ) : (
+            <>
+              <XAxis dataKey={xDataKey} tick={showXAxisLabels ? { fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_BODY } : false} axisLine={false} tickLine={false} height={showXAxisLabels ? 24 : 0} tickFormatter={xTickFormatter} />
+              <YAxis tick={{ fill: THEME.textSecondary, fontSize: 11, fontFamily: FONT_NUMBERS }} axisLine={false} tickLine={false} />
+            </>
+          )}
           <Tooltip
             content={(props) => (
               <DarkTooltip
                 {...props}
-                label={
-                  tooltipLabelFormatter && props.label !== undefined
-                    ? tooltipLabelFormatter(props.label)
-                    : props.label
-                }
+                label={tooltipLabelFormatter && props.label !== undefined ? tooltipLabelFormatter(props.label) : props.label}
               />
             )}
-            cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+            cursor={{ fill: 'rgba(124,58,237,0.05)' }}
             wrapperStyle={{ zIndex: 1000, pointerEvents: 'none' }}
           />
-          {segments.map((segment) => (
+          {segments.map((segment, i) => (
             <Bar
               key={segment.key}
               dataKey={segment.key}
               stackId="stack"
               fill={segment.color}
-              radius={[4, 4, 0, 0]}
+              radius={
+                horizontal
+                  ? i === segments.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]
+                  : i === segments.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]
+              }
               animationDuration={800}
               animationEasing="ease-out"
               maxBarSize={maxBarSize}

@@ -1,34 +1,122 @@
-import React, { useState, useEffect } from 'react';
-import { dashboardAPI, alertAPI, engagementAPI, challengeAPI } from '../services/api';
-import { TeacherDashboardData } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { dashboardAPI, alertAPI, activityAPI, challengeAPI, quizAPI, examAPI, ScheduledAssignmentItem, QuizHomeworkItem, QuizSubmissionItem, TeacherExamsResponse, MockExamItem, MockExamResultItem } from '../services/api';
+import { TeacherDashboardData, ActivityOverview, TestPrepItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
-import MetricsCards from '../components/MetricsCards';
 import StudentTable from '../components/StudentTable';
 import SendAlertModal from '../components/SendAlertModal';
 import SendChallengeModal from '../components/SendChallengeModal';
 import StudentDetailModal from '../components/StudentDetailModal';
-import { TeacherAnalytics } from '../components/AnalyticsSections';
+import ActivityFeed from '../components/ActivityFeed';
+import ExamCorrectionPanel from '../components/ExamCorrectionPanel';
+import MockExamResults, { CompareMockExams } from '../components/MockExamResults';
+import MockExamAnalysis from '../components/MockExamAnalysis';
+import StudentTrackGrid, { TrackPreloadData } from '../components/StudentTrackGrid';
+import ScheduledAssignmentsPanel from '../components/ScheduledAssignmentsPanel';
+import DashboardIcon from '../components/DashboardIcon';
+import PageHelpBar, { HelpItem } from '../components/PageHelpBar';
 
-const FONT = "'Plus Jakarta Sans', sans-serif";
-const FONT_SERIF = "'Source Serif 4', Georgia, serif";
+const FONT = '"Plus Jakarta Sans", system-ui, sans-serif';
+const FONT_SERIF = '"Source Serif 4", Georgia, serif';
+
+const C = {
+  bg: '#EDE9FE', cardBg: '#FFFFFF', cardAlt: '#F5F3FF',
+  border: '#E2E8F0', borderLight: '#CBD5E1',
+  text: '#0F172A', textSecondary: '#475569', textMuted: '#64748B',
+  teal: '#7C3AED', tealDark: '#6D28D9', tealSoft: 'rgba(124,58,237,0.10)',
+  green: '#10B981', greenSoft: 'rgba(16,185,129,0.12)',
+  amber: '#F59E0B', amberSoft: 'rgba(245,158,11,0.12)',
+  blue: '#3B82F6', blueSoft: 'rgba(59,130,246,0.10)',
+  red: '#F43F5E', redSoft: 'rgba(244,63,94,0.12)',
+  card: '#FFFFFF',
+  shadow: '0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.05)',
+  shadowLg: '0 4px 6px rgba(0,0,0,0.04), 0 10px 24px rgba(0,0,0,0.08)',
+};
+
 
 const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
   const { setDashboardData: shareDashboardData } = useDashboard();
+
   const [dashboardData, setDashboardData] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showGreeting, setShowGreeting] = useState(true);
+
+  const [activeTab, setActiveTab] = useState<'track-status' | 'assignments' | 'students' | 'daily-quizzes' | 'exam-correction' | 'mock-exams' | 'mock-exam-analysis' | 'compare-mock-exams' | 'jee-exams' | 'pre-assessment' | 'activity'>('students');
+  const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
+  const [testPrepLoading, setTestPrepLoading] = useState(false);
+
+  const [quizHomeworks, setQuizHomeworks] = useState<QuizHomeworkItem[] | null>(null);
+  const [quizHomeworksLoading, setQuizHomeworksLoading] = useState(false);
+  const [selectedHomeworkId, setSelectedHomeworkId] = useState<number | null>(null);
+  const [homeworkSubmissions, setHomeworkSubmissions] = useState<QuizSubmissionItem[] | null>(null);
+  const [homeworkSubmissionsLoading, setHomeworkSubmissionsLoading] = useState(false);
+
+  const [teacherExamsData, setTeacherExamsData] = useState<TeacherExamsResponse | null>(null);
+  const [teacherExamsLoading, setTeacherExamsLoading] = useState(false);
+
+  const [mockExams, setMockExams] = useState<MockExamItem[] | null>(null);
+  const [mockExamsLoading, setMockExamsLoading] = useState(false);
+  const [selectedMockExamId, setSelectedMockExamId] = useState<number | null>(null);
+  const [mockExamResults, setMockExamResults] = useState<MockExamResultItem[] | null>(null);
+  const [mockExamResultsLoading, setMockExamResultsLoading] = useState(false);
+  const [mockExamClassFilter, setMockExamClassFilter] = useState('All');
+  const [mockExamSectionFilter, setMockExamSectionFilter] = useState('All');
+
+  const [analysisExamId, setAnalysisExamId] = useState<number | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<MockExamResultItem[] | null>(null);
+  const [analysisResultsLoading, setAnalysisResultsLoading] = useState(false);
+
+  const [compareExamIds, setCompareExamIds] = useState<[number, number] | null>(null);
+  const [compareResults, setCompareResults] = useState<{ exam1: MockExamResultItem[]; exam2: MockExamResultItem[] } | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+
+  const [prepChapterFilter, setPrepChapterFilter] = useState<string>('All');
+  const [prepClassFilter, setPrepClassFilter] = useState<string>('All');
+  const [prepSectionFilter, setPrepSectionFilter] = useState<string>('All');
+  const [prepMinAttempts, setPrepMinAttempts] = useState<number>(1);
+  const [prepMinScore, setPrepMinScore] = useState<number>(0);
+
+  const [trackPreload, setTrackPreload] = useState<TrackPreloadData | undefined>(undefined);
+  const [scheduledAssignments, setScheduledAssignments] = useState<ScheduledAssignmentItem[] | null>(null);
+
+  const [dayFilter, setDayFilter] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
+  const [trackTopic, setTrackTopic] = useState<string>('All');
+  const trackGridRef = useRef<HTMLDivElement>(null);
+
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [showChallengeModal, setShowChallengeModal] = useState(false);
   const [challengeStudentId, setChallengeStudentId] = useState<number | null>(null);
   const [viewStudentId, setViewStudentId] = useState<number | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [dayFilter, setDayFilter] = useState<number | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const teacherUsername = user?.username;
+
+  const dayFilterOptions = [
+    { label: 'All', value: null },
+    { label: 'Today', value: 0 },
+    { label: '1 Day', value: 1 },
+    { label: '2 Days', value: 2 },
+    { label: '7 Days', value: 7 },
+  ] as const;
+
+  const getMockExamClassCode = (value?: string | null) => {
+    if (!value) return '';
+    const trimmed = String(value).trim();
+    const numberMatch = trimmed.match(/\d+/);
+    return numberMatch ? numberMatch[0] : trimmed.replace(/^class\s+/i, '');
+  };
+
+  const getMockExamSectionName = (value?: string | null) => {
+    if (!value) return '';
+    return String(value).trim().replace(/^section\s+/i, '');
+  };
 
   const loadDashboard = async () => {
     if (!teacherUsername) {
@@ -43,18 +131,285 @@ const TeacherDashboard: React.FC = () => {
       shareDashboardData(data);
       setError('');
     } catch (err: any) {
-      if (err?.response?.status === 404) {
-        setError(`Teacher username "${teacherUsername}" not found in the database.`);
-      } else {
-        setError('Failed to load dashboard. Please check if the API is running.');
-      }
-      console.error(err);
+      const message = err?.response?.data?.detail ?? err?.message ?? 'Unknown error';
+      setError(`Failed to load dashboard: ${message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadDashboard(); }, [teacherUsername]);
+  const loadScheduledAssignments = async () => {
+    if (!teacherUsername) return;
+    try {
+      const data = await quizAPI.getHomeworks(teacherUsername, 500);
+      const items = (data.items ?? []).map((item) => ({
+        assignment_id: String(item.id),
+        assignment_code: item.homework_code ?? null,
+        title: item.title ?? null,
+        status: null,
+        scheduled_date: item.date_assigned ?? null,
+        due_date: item.due_date ?? null,
+        class_id: null,
+        class_name: item.description_data?.class_name ?? null,
+        section_id: null,
+        section_name: null,
+        subject_id: null,
+        subject_name: item.description_data?.subject_name ?? item.description_data?.subject ?? null,
+        topic_id: null,
+        topic_name: item.description_data?.chapters?.[0]?.replace(/_/g, ' ') ?? null,
+        subtopic_code: null,
+        question_count: item.description_data?.questions_per_chapter ?? 0,
+        assigned_count: 0,
+        viewed_count: 0,
+        submitted_count: item.total_submissions ?? 0,
+        missed_count: 0,
+        cancelled_count: 0,
+      }));
+      setScheduledAssignments(items);
+    } catch (err) {
+      console.error('Failed to load scheduled assignments:', err);
+      setScheduledAssignments([]);
+    }
+  };
+
+  const loadActivity = async () => {
+    if (activityData || !user?.school_id) return;
+    try {
+      setActivityLoading(true);
+      const data = await activityAPI.getSchoolActivity(user.school_id);
+      setActivityData(data);
+    } catch (err) {
+      console.error('Failed to load activity:', err);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const loadTestPrep = async () => {
+    if (testPrepData) return;
+    const schoolCode = user?.school_code || 'ELP';
+    try {
+      setTestPrepLoading(true);
+      const result = await dashboardAPI.getTestPrepBySchoolCode(schoolCode);
+      setTestPrepData(result.items ?? []);
+    } catch (err) {
+      console.error('Failed to load test prep:', err);
+      setTestPrepData([]);
+    } finally {
+      setTestPrepLoading(false);
+    }
+  };
+
+  const loadQuizHomeworks = async () => {
+    if (quizHomeworks || !teacherUsername) return;
+    try {
+      setQuizHomeworksLoading(true);
+      const data = await quizAPI.getHomeworks(teacherUsername);
+      setQuizHomeworks(data.items);
+    } catch (err) {
+      console.error('Failed to load quiz homeworks:', err);
+      setQuizHomeworks([]);
+    } finally {
+      setQuizHomeworksLoading(false);
+    }
+  };
+
+  const loadTeacherExams = async () => {
+    if (teacherExamsData || !teacherUsername) return;
+    try {
+      setTeacherExamsLoading(true);
+      const data = await examAPI.getTeacherExams(teacherUsername);
+      setTeacherExamsData(data);
+    } catch (err) {
+      console.error('Failed to load teacher exams:', err);
+      setTeacherExamsData(null);
+    } finally {
+      setTeacherExamsLoading(false);
+    }
+  };
+
+  const loadMockExams = async (classFilter = mockExamClassFilter, sectionFilter = mockExamSectionFilter, force = false) => {
+    if (mockExams && !force && classFilter === mockExamClassFilter && sectionFilter === mockExamSectionFilter) return;
+    if (!teacherUsername) return;
+    try {
+      setMockExamsLoading(true);
+      const schoolCode = user?.school_code || 'ELP';
+      let items: MockExamItem[];
+      if (classFilter !== 'All') {
+        const data = await examAPI.getMockExamsByClassSection({
+          school_code: schoolCode,
+          class_code: classFilter,
+          ...(sectionFilter !== 'All' ? { section_name: sectionFilter } : {}),
+          limit: 100,
+        });
+        items = data.items ?? [];
+      } else {
+        // Fetch by-class-section for each known class (preserves chapters field)
+        const classes = Array.from(new Set((dashboardData?.students ?? []).map(s => getMockExamClassCode(s.grade)).filter(Boolean)));
+        if (classes.length > 0) {
+          const responses = await Promise.all(
+            classes.map(cls =>
+              examAPI.getMockExamsByClassSection({ school_code: schoolCode, class_code: cls, limit: 100 })
+                .then(d => d.items ?? [])
+                .catch(() => [] as MockExamItem[])
+            )
+          );
+          // Deduplicate by homework_id
+          const seen = new Map<number, MockExamItem>();
+          for (const batch of responses) {
+            for (const exam of batch) {
+              if (!seen.has(exam.homework_id)) seen.set(exam.homework_id, exam);
+            }
+          }
+          items = Array.from(seen.values()).sort((a, b) =>
+            (b.date_assigned ?? '').localeCompare(a.date_assigned ?? '')
+          );
+        } else {
+          items = [];
+        }
+      }
+      setMockExams(items);
+      setSelectedMockExamId(null);
+      setMockExamResults(null);
+    } catch (err) {
+      console.error('Failed to load mock exams:', err);
+      setMockExams([]);
+    } finally {
+      setMockExamsLoading(false);
+    }
+  };
+
+  const handleMockExamFiltersChange = (classFilter: string, sectionFilter: string) => {
+    setMockExamClassFilter(classFilter);
+    setMockExamSectionFilter(sectionFilter);
+    loadMockExams(classFilter, sectionFilter, true);
+  };
+
+  const handleSelectMockExam = async (homeworkId: number) => {
+    if (homeworkId === 0) {
+      setSelectedMockExamId(null);
+      setMockExamResults(null);
+      return;
+    }
+    setSelectedMockExamId(homeworkId);
+    setMockExamResults(null);
+    try {
+      setMockExamResultsLoading(true);
+      const data = await examAPI.getMockExamResults(homeworkId);
+      setMockExamResults(data.items ?? []);
+    } catch (err) {
+      console.error('Failed to load mock exam results:', err);
+      setMockExamResults([]);
+    } finally {
+      setMockExamResultsLoading(false);
+    }
+  };
+
+  const handleCompareExams = async (id1: number, id2: number, _cls?: string, _sec?: string) => {
+    setCompareExamIds([id1, id2]);
+    setCompareResults(null);
+    try {
+      setCompareLoading(true);
+      const [r1, r2] = await Promise.all([
+        examAPI.getMockExamResults(id1, 500),
+        examAPI.getMockExamResults(id2, 500),
+      ]);
+      setCompareResults({ exam1: r1.items ?? [], exam2: r2.items ?? [] });
+    } catch (err) {
+      console.error('Failed to load compare results:', err);
+      setCompareResults({ exam1: [], exam2: [] });
+    } finally {
+      setCompareLoading(false);
+    }
+  };
+
+  const handleSelectAnalysisExam = async (id: number | null) => {
+    if (id === null || id === analysisExamId) {
+      setAnalysisExamId(null);
+      setAnalysisResults(null);
+      return;
+    }
+    setAnalysisExamId(id);
+    setAnalysisResults(null);
+    try {
+      setAnalysisResultsLoading(true);
+      const data = await examAPI.getMockExamResults(id);
+      setAnalysisResults(data.items ?? []);
+    } catch {
+      setAnalysisResults([]);
+    } finally {
+      setAnalysisResultsLoading(false);
+    }
+  };
+
+  const handleExitCompare = () => {
+    setCompareExamIds(null);
+    setCompareResults(null);
+  };
+
+  const fetchMockExamsForSection = async (classCode: string, sectionName?: string): Promise<MockExamItem[]> => {
+    const schoolCode = user?.school_code || 'ELP';
+    try {
+      const data = await examAPI.getMockExamsByClassSection({
+        school_code: schoolCode,
+        class_code: classCode,
+        ...(sectionName ? { section_name: sectionName } : {}),
+        limit: 200,
+      });
+      return data.items ?? [];
+    } catch {
+      return [];
+    }
+  };
+
+  const loadHomeworkSubmissions = async (homeworkId: number) => {
+    setSelectedHomeworkId(homeworkId);
+    setHomeworkSubmissions(null);
+    try {
+      setHomeworkSubmissionsLoading(true);
+      const data = await quizAPI.getSubmissions(homeworkId);
+      setHomeworkSubmissions(data.items);
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
+      setHomeworkSubmissions([]);
+    } finally {
+      setHomeworkSubmissionsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadDashboard(); loadScheduledAssignments(); loadTestPrep(); }, [teacherUsername]);
+
+  // Pre-fetch StudentTrackGrid Wave 1 data during the greeting screen so the
+  // skeleton resolves faster once the main dashboard is ready.
+  useEffect(() => {
+    if (!teacherUsername || !user?.school_code) return;
+    const sc = user.school_code;
+    const base = process.env.REACT_APP_API_URL || 'https://crm.smartlearners.ai/backend-api/';
+    Promise.all([
+      fetch(`${base}api/external-data/user-sessions/by-school-code`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ school_code: sc, limit: 5000 }),
+      }),
+      fetch(`${base}api/external-data/quiz-homework/by-username`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: teacherUsername, limit: 500 }),
+      }),
+      fetch(`${base}api/external-data/teacher-exams/by-username`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: teacherUsername, limit: 5 }),
+      }),
+    ])
+      .then(([r1, r2, r3]) => Promise.all([r1.json(), r2.json(), r3.json()]))
+      .then(([sessionData, homeworkData, examData]) => {
+        setTrackPreload({
+          sessions: sessionData.items ?? [],
+          homeworks: homeworkData.items ?? [],
+          exams: examData.items ?? [],
+          resolvedSchoolCode: homeworkData.school_code || sc,
+        });
+      })
+      .catch(() => { /* silent — StudentTrackGrid falls back to its own fetch */ });
+  }, [teacherUsername, user?.school_code]);
 
   const handleSendAlert = (studentId: number) => {
     setSelectedStudentId(studentId);
@@ -76,10 +431,7 @@ const TeacherDashboard: React.FC = () => {
   };
 
   const handleSendBulkAlert = async () => {
-    if (selectedIds.size === 0) {
-      alert('No students selected.');
-      return;
-    }
+    if (selectedIds.size === 0) { alert('No students selected.'); return; }
     const confirmed = window.confirm(`Send WhatsApp alerts to ${selectedIds.size} selected students?`);
     if (!confirmed) return;
     try {
@@ -96,16 +448,129 @@ const TeacherDashboard: React.FC = () => {
     }
   };
 
+  // ── Test prep helpers ──────────────────────────────────────────────────────
+
+  const getPrepItemScore = (item: TestPrepItem) =>
+    Number(item.graph_data?.score_pct ?? item.analysis?.analysis?.score_pct ?? item.analysis?.prediction?.score_pct ?? 0);
+
+  const getItemChapters = (item: TestPrepItem): string[] => {
+    const breakdown: any[] = item.graph_data?.chapter_breakdown ?? [];
+    if (breakdown.length > 0) {
+      const chapters = breakdown.map((e: any) => String(e.chapter || '')).filter(Boolean);
+      if (chapters.length > 0) return chapters;
+    }
+    return (item.questions ?? []).map((q: any) => String(q.chapter || '')).filter(Boolean);
+  };
+
+  const usernameByStudentId = useMemo(() => {
+    const map = new Map<number, string>();
+    (testPrepData ?? []).forEach((item) => {
+      if (item.student_id && item.username) map.set(item.student_id, item.username);
+    });
+    return map;
+  }, [testPrepData, dashboardData]);
+
+  const testPrepByStudentId = useMemo(() => {
+    const map = new Map<number, TestPrepItem[]>();
+    if (!testPrepData || !dashboardData) return map;
+    const teacherStudentIds = new Set(dashboardData.students.map((s) => s.student_id));
+    for (const item of testPrepData) {
+      if (!item.student_id || !teacherStudentIds.has(item.student_id)) continue;
+      const list = map.get(item.student_id) ?? [];
+      list.push(item);
+      map.set(item.student_id, list);
+    }
+    return map;
+  }, [testPrepData, dashboardData]);
+
+  const prepChapterOptions = useMemo(() => {
+    if (!testPrepData) return ['All'];
+    const chapters = new Set<string>();
+    testPrepByStudentId.forEach((items) => items.forEach((item) => getItemChapters(item).forEach((ch) => chapters.add(ch))));
+    return ['All', ...Array.from(chapters).sort((a, b) => a.localeCompare(b))];
+  }, [testPrepByStudentId]);
+
+  const prepClassOptions = useMemo(() => {
+    if (!testPrepData) return ['All'];
+    const classes = new Set<string>();
+    testPrepByStudentId.forEach((items) => items.forEach((item) => { if (item.class_name) classes.add(String(item.class_name)); }));
+    return ['All', ...Array.from(classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+  }, [testPrepByStudentId]);
+
+  const prepSectionOptions = useMemo(() => {
+    const sections = new Set<string>();
+    testPrepByStudentId.forEach((items) => items.forEach((item) => {
+      if (prepClassFilter !== 'All' && String(item.class_name) !== prepClassFilter) return;
+      if (item.section_name) sections.add(String(item.section_name));
+    }));
+    return ['All', ...Array.from(sections).sort()];
+  }, [testPrepByStudentId, prepClassFilter]);
+
+  const prepFilteredStudents = useMemo(() => {
+    if (!dashboardData) return [];
+    return dashboardData.students.filter((student) => {
+      let items = testPrepByStudentId.get(student.student_id) ?? [];
+      if (prepChapterFilter !== 'All') items = items.filter((item) => getItemChapters(item).includes(prepChapterFilter));
+      if (prepClassFilter !== 'All') items = items.filter((item) => String(item.class_name) === prepClassFilter);
+      if (prepSectionFilter !== 'All') items = items.filter((item) => String(item.section_name) === prepSectionFilter);
+      if (items.length < prepMinAttempts) return false;
+      if (prepMinScore > 0 && !items.some((item) => getPrepItemScore(item) >= prepMinScore)) return false;
+      return true;
+    });
+  }, [dashboardData, testPrepByStudentId, prepChapterFilter, prepClassFilter, prepSectionFilter, prepMinAttempts, prepMinScore]);
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const displayName = user?.full_name || user?.username || 'Teacher';
+  const initials = displayName.split(/\s+|@/).filter(Boolean).slice(0, 2).map((w: string) => w[0].toUpperCase()).join('');
+
+  useEffect(() => {
+    if (!showGreeting) return;
+    const t = setTimeout(() => setShowGreeting(false), 2000);
+    return () => clearTimeout(t);
+  }, [showGreeting]);
+
+  if (showGreeting) {
+    return (
+      <div style={{ minHeight: 'calc(100vh - 64px)', background: C.bg, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '80px', fontFamily: FONT }}>
+        <div style={{
+          background: C.card, borderRadius: '24px', border: `1px solid ${C.border}`,
+          boxShadow: C.shadowLg, padding: '48px 64px', textAlign: 'center',
+          maxWidth: '480px', width: '100%',
+        }}>
+          <div style={{
+            width: '72px', height: '72px', borderRadius: '20px', margin: '0 auto 28px',
+            background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '26px', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em',
+            boxShadow: `0 0 0 8px rgba(124,58,237,0.12)`,
+          }}>
+            {initials}
+          </div>
+          <div style={{ fontSize: '14px', color: C.textMuted, fontWeight: 500, marginBottom: '8px', letterSpacing: '0.01em' }}>
+            {greeting},
+          </div>
+          <div style={{ fontSize: '32px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.15, marginBottom: '14px' }}>
+            {displayName}
+          </div>
+          <div style={{ fontSize: '14px', color: C.textSecondary, fontWeight: 500, lineHeight: 1.6 }}>
+            Hope you are having a good day! 🌟
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', fontFamily: FONT, background: C.bg }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 16 }}>
             {[0, 1, 2].map((i) => (
-              <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#14B8A6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+              <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: C.teal, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
             ))}
           </div>
-          <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#94A3B8' }}>Loading dashboard...</p>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: C.textMuted, fontFamily: FONT }}>Loading dashboard...</p>
         </div>
       </div>
     );
@@ -113,11 +578,11 @@ const TeacherDashboard: React.FC = () => {
 
   if (error) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', fontFamily: FONT }}>
-        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '40px', background: '#111827', borderRadius: '20px', border: '1px solid #1E293B' }}>
-          <h2 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, color: '#F1F5F9' }}>Connection Error</h2>
-          <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>{error}</p>
-          <button onClick={loadDashboard} style={{ padding: '10px 24px', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #0d9488, #14B8A6)', color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 64px)', fontFamily: FONT, background: C.bg }}>
+        <div style={{ textAlign: 'center', maxWidth: 400, padding: 40, background: C.card, borderRadius: 20, border: `1px solid ${C.border}`, boxShadow: C.shadowLg }}>
+          <h2 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT_SERIF }}>Connection Error</h2>
+          <p style={{ margin: '0 0 20px', fontSize: 14, color: C.textSecondary, lineHeight: 1.5 }}>{error}</p>
+          <button onClick={loadDashboard} style={{ padding: '10px 24px', borderRadius: 10, border: 'none', background: C.teal, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
             Retry
           </button>
         </div>
@@ -127,13 +592,7 @@ const TeacherDashboard: React.FC = () => {
 
   if (!dashboardData) return null;
 
-  const dayFilterOptions = [
-    { label: 'All', value: null },
-    { label: 'Today', value: 0 },
-    { label: '1 Day', value: 1 },
-    { label: '2 Days', value: 2 },
-    { label: '7 Days', value: 7 },
-  ] as const;
+  const teacherLabel = dashboardData.teacher_name || teacherUsername || 'Teacher';
 
   const filteredStudents = dayFilter === null
     ? dashboardData.students
@@ -143,125 +602,592 @@ const TeacherDashboard: React.FC = () => {
         return u.days_since_login <= dayFilter;
       });
 
-  const teacherLabel = dashboardData.teacher_name || teacherUsername || 'Teacher';
+  const mockExamClassOptions = ['All', ...Array.from(new Set(dashboardData.students.map((student) => getMockExamClassCode(student.grade)).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+  const mockExamSectionOptions = [
+    'All',
+    ...Array.from(new Set(
+      dashboardData.students
+        .filter((student) => mockExamClassFilter === 'All' || getMockExamClassCode(student.grade) === mockExamClassFilter)
+        .map((student) => getMockExamSectionName(student.section))
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+  ];
+
+  const scoreColor = (s: number) => s >= 70 ? '#10B981' : s >= 50 ? '#F59E0B' : '#F43F5E';
+
+
+  const navItems = [
+    { key: 'students' as const, label: 'Students', icon: 'users', count: filteredStudents.length },
+    { key: 'exam-correction' as const, label: 'Exam Correction', icon: 'file', count: teacherExamsData?.total_exams },
+    { key: 'track-status' as const, label: 'Track Status', icon: 'grid' },
+    { key: 'mock-exams' as const, label: 'Mock Exams', icon: 'target' },
+    { key: 'mock-exam-analysis' as const, label: 'Mock Exam Analysis', icon: 'monitor' },
+    { key: 'compare-mock-exams' as const, label: 'Compare Mock Exams', icon: 'bar' },
+  ];
+
+  const handleNavClick = (key: typeof activeTab) => {
+    setActiveTab(key);
+    if (key === 'activity') loadActivity();
+    if (key === 'students') loadTestPrep();
+    if (key === 'pre-assessment') loadTestPrep();
+    if (key === 'daily-quizzes') loadQuizHomeworks();
+    if (key === 'exam-correction') loadTeacherExams();
+    if (key === 'mock-exams') loadMockExams();
+    if (key === 'mock-exam-analysis') loadMockExams();
+    if (key === 'compare-mock-exams') loadMockExams();
+  };
+
+  const sectionTitles: Record<typeof activeTab, string> = {
+    'track-status': 'Track Status',
+    'assignments': 'Scheduled Assignments',
+    'students': 'Students', 'daily-quizzes': 'Daily Quizzes',
+    'exam-correction': 'Exam Correction', 'mock-exams': 'Mock Exams', 'mock-exam-analysis': 'Mock Exam Analysis', 'compare-mock-exams': 'Compare Mock Exams', 'jee-exams': 'JEE Format',
+    'pre-assessment': 'Pre-Assessment', 'activity': 'Activity',
+  };
+
+  const TAB_HELP: Record<typeof activeTab, HelpItem[]> = {
+    students: [
+      { icon: '🔍', title: 'Filters',      description: 'Filter students by engagement status, section, or search by name.' },
+      { icon: '👥', title: 'Student Table',description: 'Full list of your students with activity status, last seen, and quiz stats.' },
+      { icon: '🔔', title: 'Bulk Alert',   description: 'Select students and send a WhatsApp alert to all of them at once.' },
+    ],
+    'track-status': [
+      { icon: '🧩', title: 'Status Overview', description: 'Bar chart showing how many students are On Track, Slightly Off, or Completely Off.' },
+      { icon: '📚', title: 'Topic Filter',    description: 'Filter by topic to see per-student performance on a specific assignment.' },
+      { icon: '👤', title: 'Student Cards',   description: 'Click a bar to expand student cards. Tap a card for topic-level breakdown.' },
+    ],
+    assignments: [
+      { icon: '📅', title: 'Assignments Calendar', description: 'Calendar view of all scheduled assignments. Click a date to filter.' },
+      { icon: '📋', title: 'Assignment Cards',     description: 'Each card shows assigned-to, viewed-by, and submitted-by counts for that task.' },
+      { icon: '🔗', title: 'Track Button',         description: 'Click "Track Status" on a card to jump to Track Status filtered by that topic.' },
+    ],
+    'daily-quizzes': [
+      { icon: '📝', title: 'Quiz List',    description: 'All daily quizzes you have assigned, with submission and view counts.' },
+      { icon: '📈', title: 'Submission Stats', description: 'See how many students have attempted or skipped each quiz.' },
+    ],
+    'exam-correction': [
+      { icon: 'Exam', title: 'Exam Cards', description: 'Each card shows exam type, student count, average score, top score, and processed students.' },
+      { icon: 'Files', title: 'File Metrics', description: 'Review uploaded question papers, answer sheets, and processing timestamps for each corrected exam.' },
+    ],
+    'mock-exams': [],
+    'mock-exam-analysis': [
+      { icon: '📊', title: 'Programme KPIs', description: 'Total exams, submissions, and weighted average score across all mock exams.' },
+      { icon: '📋', title: 'Exam List',      description: 'Full table of all mock exams with subject, date, submissions, and average.' },
+    ],
+    'compare-mock-exams': [
+      { icon: '📊', title: 'Select Exams', description: 'Pick a class and section, then choose two mock exams to compare.' },
+      { icon: '📋', title: 'Side-by-Side', description: 'See score distributions and student-level changes between the two exams.' },
+    ],
+    activity: [
+      { icon: '🕒', title: 'Activity Feed', description: 'Chronological log of student logins, quiz attempts, and exam submissions.' },
+    ],
+    'pre-assessment': [
+      { icon: '🧪', title: 'Test Prep Cards', description: 'Analytics on pre-assessment performance per student and topic.' },
+    ],
+    'jee-exams': [
+      { icon: '📐', title: 'JEE Exams', description: 'JEE-format exam results and performance breakdown for your students.' },
+    ],
+  };
 
   return (
-    <div style={{ minHeight: 'calc(100vh - 64px)', fontFamily: FONT }}>
-      {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #111827 0%, #1a2332 100%)', borderBottom: '1px solid #1E293B' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          {/* Left - Teacher name */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 800, color: '#F1F5F9', fontFamily: FONT_SERIF }}>
-              {teacherLabel}
-            </h1>
-            <span style={{ padding: '4px 14px', borderRadius: '8px', background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)', fontSize: '15px', fontWeight: 700, color: '#3B82F6', fontFamily: FONT_SERIF }}>
-              {dashboardData.total_students} <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8' }}>Students</span>
+    <div style={{ display: 'flex', minHeight: 'calc(100vh - 64px)', fontFamily: FONT, background: C.bg }}>
+
+      {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
+      <aside style={{
+        width: sidebarCollapsed ? '72px' : '220px', flexShrink: 0, background: C.cardBg,
+        borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column',
+        position: 'sticky', top: '64px', height: 'calc(100vh - 64px)', overflowY: 'auto', overflowX: 'hidden',
+        transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
+        {/* Collapse toggle */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px', borderBottom: `1px solid ${C.border}` }}>
+          <button
+            onClick={() => setSidebarCollapsed(v => !v)}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
+              border: `1px solid ${C.border}`, background: 'transparent',
+              color: C.textMuted, cursor: 'pointer',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = C.cardAlt; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <span style={{
+              display: 'flex', transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: sidebarCollapsed ? 'rotate(180deg)' : 'none',
+            }}>
+              <DashboardIcon name="chevL" size={14} color={C.textMuted} />
             </span>
-          </div>
-          {/* Right - Refresh */}
-          <button onClick={loadDashboard} disabled={refreshing} style={{
-            padding: '7px 16px', borderRadius: '8px', border: 'none',
-            background: 'linear-gradient(135deg, #0d9488, #14B8A6)', color: '#fff',
-            fontSize: '12px', fontWeight: 700, cursor: refreshing ? 'wait' : 'pointer',
-            fontFamily: FONT, boxShadow: '0 2px 8px rgba(20,184,166,0.25)',
-            opacity: refreshing ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '5px',
-          }}>
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M23 4v6h-6" strokeLinecap="round" strokeLinejoin="round" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            Refresh
           </button>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '16px 24px' }}>
-        {/* Metrics */}
-        <MetricsCards
-          totalStudents={dashboardData.total_students}
-          activeStudents={dashboardData.active_students}
-          activeSessions={dashboardData.active_sessions}
-          atRiskStudents={dashboardData.at_risk_students}
-          inactiveStudents={dashboardData.inactive_students}
-          students={dashboardData.students}
-        />
+        {/* Nav items */}
+        <nav style={{ padding: '16px 10px', flex: 1 }}>
+          {navItems.map((item, i) => {
+            if (item === null) return <div key={`div-${i}`} style={{ height: '1px', background: C.border, margin: '12px 6px' }} />;
+            const isActive = activeTab === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => handleNavClick(item.key)}
+                title={sidebarCollapsed ? item.label : undefined}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '12px 14px', borderRadius: '10px', border: 'none',
+                  background: isActive ? C.tealSoft : 'transparent',
+                  color: isActive ? C.teal : C.textSecondary,
+                  fontSize: '13px', fontWeight: isActive ? 700 : 500,
+                  cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+                  marginBottom: '6px', transition: 'background 0.12s',
+                  overflow: 'hidden',
+                }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = C.cardAlt; }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <DashboardIcon name={item.icon} size={17} color={isActive ? C.teal : C.textMuted} />
+                <span style={{
+                  flex: 1, overflow: 'hidden', whiteSpace: 'nowrap',
+                  opacity: sidebarCollapsed ? 0 : 1,
+                  maxWidth: sidebarCollapsed ? 0 : '160px',
+                  transition: 'opacity 0.15s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                }}>{item.label}</span>
+                {'count' in item && item.count !== undefined && (
+                  <span style={{
+                    padding: '1px 7px', borderRadius: '99px', fontSize: '11px', fontWeight: 700,
+                    background: isActive ? C.tealSoft : C.cardAlt,
+                    color: isActive ? C.teal : C.textMuted,
+                    overflow: 'hidden', whiteSpace: 'nowrap', flexShrink: 0,
+                    opacity: sidebarCollapsed ? 0 : 1,
+                    maxWidth: sidebarCollapsed ? 0 : '60px',
+                    transition: 'opacity 0.15s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}>{item.count}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
 
-        {/* Analytics Section */}
-        <div style={{ marginTop: '16px' }}>
-          <TeacherAnalytics students={dashboardData.students} />
-        </div>
-
-        {/* Student Table Section */}
-        <div style={{ marginTop: '16px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#F1F5F9', fontFamily: FONT_SERIF }}>My Students</h2>
-              <span style={{ padding: '2px 10px', borderRadius: '99px', background: 'rgba(20,184,166,0.15)', border: '1px solid rgba(20,184,166,0.3)', fontSize: '12px', fontWeight: 700, color: '#14B8A6' }}>
-                {filteredStudents.length}
-              </span>
-              {selectedIds.size > 0 && (
-                <button onClick={handleSendBulkAlert} disabled={refreshing} style={{ padding: '5px 14px', borderRadius: '8px', border: 'none', background: '#10B981', color: '#fff', fontSize: '11px', fontWeight: 700, cursor: refreshing ? 'wait' : 'pointer', fontFamily: FONT, opacity: refreshing ? 0.6 : 1 }}>
-                  {refreshing ? 'Sending...' : `Alert Selected (${selectedIds.size})`}
-                </button>
+        {/* Teacher info at bottom */}
+        <div style={{ padding: '14px 16px', borderTop: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div title={sidebarCollapsed ? teacherLabel : undefined} style={{
+              width: '36px', height: '36px', borderRadius: '10px', flexShrink: 0,
+              background: `linear-gradient(135deg, ${C.tealDark}, ${C.teal})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '13px', fontWeight: 800, color: '#fff',
+            }}>{initials}</div>
+            <div style={{
+              minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap',
+              opacity: sidebarCollapsed ? 0 : 1,
+              maxWidth: sidebarCollapsed ? 0 : '160px',
+              transition: 'opacity 0.15s ease, max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{teacherLabel}</div>
+              {user?.school_code && (
+                <span style={{ fontSize: '11px', fontWeight: 600, color: C.teal, background: C.tealSoft, padding: '1px 7px', borderRadius: '99px' }}>
+                  {user.school_code.toUpperCase()}
+                </span>
               )}
             </div>
-            <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-              {dayFilterOptions.map((opt) => (
-                <button key={String(opt.value)} onClick={() => setDayFilter(opt.value)} style={{
-                  padding: '4px 10px', borderRadius: '6px',
-                  border: dayFilter === opt.value ? '1.5px solid #14B8A6' : '1.5px solid transparent',
-                  background: dayFilter === opt.value ? 'rgba(20,184,166,0.15)' : '#111827',
-                  color: dayFilter === opt.value ? '#14B8A6' : '#64748B',
-                  fontSize: '11px', fontWeight: dayFilter === opt.value ? 700 : 500,
-                  cursor: 'pointer', fontFamily: FONT,
-                }}>{opt.label}</button>
-              ))}
-            </div>
           </div>
-          <StudentTable
-            students={filteredStudents}
-            onSendAlert={handleSendAlert}
-            onSendChallenge={handleSendChallenge}
-            onViewDetails={(studentId) => setViewStudentId(studentId)}
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-          />
+        </div>
+      </aside>
+
+      {/* ── Main area ────────────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+
+        {/* Slim top bar */}
+        <div style={{ background: C.cardBg, borderBottom: `1px solid ${C.border}`, padding: '0 28px', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>{sectionTitles[activeTab]}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {selectedIds.size > 0 && activeTab === 'students' && (
+              <button onClick={handleSendBulkAlert} disabled={refreshing} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', borderRadius: '8px', border: 'none', background: C.green, color: '#fff', fontSize: '13px', fontWeight: 700, cursor: refreshing ? 'wait' : 'pointer', fontFamily: FONT, opacity: refreshing ? 0.6 : 1 }}>
+                <DashboardIcon name="bell" size={12} color="#fff" />
+                {refreshing ? 'Sending…' : `Alert ${selectedIds.size} students`}
+              </button>
+            )}
+            <span style={{ fontSize: '12px', color: C.textMuted, fontWeight: 500 }}>
+              {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+            </span>
+          </div>
         </div>
 
-        {/* Recent Alerts - AFTER student table */}
-        {dashboardData.recent_alerts.length > 0 && (
-          <div style={{ marginTop: '16px', background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid #1E293B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <svg width="16" height="16" fill="none" stroke="#F59E0B" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              <h2 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#F1F5F9' }}>Recent Alerts</h2>
-              <span style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(245,158,11,0.15)', fontSize: '11px', fontWeight: 700, color: '#F59E0B' }}>
-                {dashboardData.recent_alerts.length}
-              </span>
-            </div>
-            <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {dashboardData.recent_alerts.slice(0, 5).map((alert) => (
-                <div key={alert.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: '#0B1120', border: '1px solid #1E293B' }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#F1F5F9' }}>Student ID: {alert.student_id}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#94A3B8' }}>{alert.reason}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#64748B' }}>{new Date(alert.created_at).toLocaleString()}</p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button onClick={() => handleSendAlert(alert.student_id)} style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: 'rgba(16,185,129,0.15)', color: '#10B981', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                      Alert
-                    </button>
-                    <button onClick={() => handleSendChallenge(alert.student_id)} style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: 'rgba(20,184,166,0.15)', color: '#14B8A6', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                      Challenge
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+        {/* Page content */}
+        <div style={{ padding: '24px 28px', flex: 1 }}>
+
+        <PageHelpBar items={TAB_HELP[activeTab]} />
+
+        {/* ── Track Status — always mounted to prevent reload on tab switch ── */}
+        <div style={{ display: activeTab === 'track-status' ? 'block' : 'none' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 800, color: C.text, fontFamily: FONT_SERIF, lineHeight: 1.2 }}>
+              Track status of students in a topic
+            </h2>
+            <p style={{ margin: '6px 0 0', fontSize: '13px', color: C.textMuted, fontWeight: 500 }}>
+              Select an assignment topic below to see how each student is performing.
+            </p>
+          </div>
+          <div ref={trackGridRef}>
+            <StudentTrackGrid
+              students={dashboardData.students}
+              schoolCode={user?.school_code ?? ''}
+              teacherUsername={teacherUsername ?? ''}
+              externalTopic={trackTopic}
+              onExternalTopicChange={setTrackTopic}
+              scheduledAssignments={scheduledAssignments ?? []}
+              preload={trackPreload}
+            />
+          </div>
+        </div>
+
+        {/* ── Scheduled Assignments ─────────────────────────────────────────── */}
+        {activeTab === 'assignments' && (
+          <ScheduledAssignmentsPanel
+            assignments={scheduledAssignments ?? []}
+            loading={scheduledAssignments === null}
+            activeTopic={trackTopic}
+            onTopicClick={(topic: string) => {
+              setTrackTopic(topic);
+              setActiveTab('track-status');
+            }}
+          />
+        )}
+
+        {/* ── Students ─────────────────────────────────────────────────────── */}
+        {activeTab === 'students' && (
+          <div>
+            <StudentTable students={filteredStudents} onSendAlert={handleSendAlert} onSendChallenge={handleSendChallenge} onViewDetails={(studentId) => setViewStudentId(studentId)} selectedIds={selectedIds} onSelectionChange={setSelectedIds} usernameByStudentId={usernameByStudentId} />
           </div>
         )}
-      </div>
+
+        {/* ── Daily Quizzes ─────────────────────────────────────────────────── */}
+        {activeTab === 'daily-quizzes' && (
+            quizHomeworksLoading ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: C.teal, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                  ))}
+                </div>
+                <p style={{ margin: 0, fontSize: '14px', color: C.textMuted }}>Loading quizzes...</p>
+              </div>
+            ) : selectedHomeworkId !== null ? (
+              <div>
+                <button
+                  onClick={() => { setSelectedHomeworkId(null); setHomeworkSubmissions(null); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px', padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  Back to Quizzes
+                </button>
+                {homeworkSubmissionsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: C.teal, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                      ))}
+                    </div>
+                    <p style={{ margin: 0, fontSize: '14px', color: C.textMuted }}>Loading submissions...</p>
+                  </div>
+                ) : !homeworkSubmissions || homeworkSubmissions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '14px' }}>No submissions found for this quiz.</div>
+                ) : (
+                  <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow }}>
+                    <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '8px', background: C.cardAlt }}>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>
+                        {quizHomeworks?.find((h) => h.id === selectedHomeworkId)?.title ?? 'Quiz Submissions'}
+                      </span>
+                      <span style={{ padding: '2px 8px', borderRadius: '99px', background: C.tealSoft, fontSize: '11px', fontWeight: 700, color: C.teal }}>
+                        {homeworkSubmissions.length} submissions
+                      </span>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.cardAlt }}>
+                          {['Student', 'Class', 'Section', 'Submitted At'].map((h) => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {homeworkSubmissions.map((sub, i) => (
+                          <tr key={sub.id} style={{ borderBottom: i < homeworkSubmissions.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : C.cardAlt }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 600, color: C.text }}>{sub.student_name}</td>
+                            <td style={{ padding: '12px 16px', color: C.textSecondary }}>{sub.class_name ?? '—'}</td>
+                            <td style={{ padding: '12px 16px', color: C.textSecondary }}>{sub.section_name ?? '—'}</td>
+                            <td style={{ padding: '12px 16px', color: C.textMuted, fontSize: '12px' }}>
+                              {sub.created_at ? new Date(sub.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : !quizHomeworks || quizHomeworks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '14px' }}>No quizzes found.</div>
+            ) : (
+              <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow }}>
+                <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '8px', background: C.cardAlt }}>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>Daily MCQ Quizzes</span>
+                  <span style={{ padding: '2px 8px', borderRadius: '99px', background: C.tealSoft, fontSize: '11px', fontWeight: 700, color: C.teal }}>{quizHomeworks.length}</span>
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.cardAlt }}>
+                      {['Title', 'Subject', 'Chapters', 'Assigned', 'Due', 'Submissions'].map((h) => (
+                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quizHomeworks.map((hw, i) => {
+                      const dd = hw.description_data;
+                      const subject = dd?.subject_name ?? dd?.subject ?? '—';
+                      const chapters = dd?.chapters ?? [];
+                      return (
+                        <tr
+                          key={hw.id}
+                          onClick={() => loadHomeworkSubmissions(hw.id)}
+                          style={{ borderBottom: i < quizHomeworks.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : C.cardAlt, cursor: 'pointer' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = C.tealSoft)}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : C.cardAlt)}
+                        >
+                          <td style={{ padding: '12px 16px', fontWeight: 600, color: C.text }}>{hw.title ?? hw.homework_code ?? `Quiz #${hw.id}`}</td>
+                          <td style={{ padding: '12px 16px', color: C.textSecondary }}>{subject}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {chapters.slice(0, 2).map((ch) => (
+                                <span key={ch} style={{ padding: '2px 8px', borderRadius: '99px', background: C.tealSoft, color: C.teal, fontSize: '11px', fontWeight: 600 }}>
+                                  {ch.replace(/_/g, ' ')}
+                                </span>
+                              ))}
+                              {chapters.length > 2 && <span style={{ padding: '2px 8px', borderRadius: '99px', background: C.cardAlt, color: C.textMuted, fontSize: '11px' }}>+{chapters.length - 2}</span>}
+                              {chapters.length === 0 && <span style={{ color: C.textMuted }}>—</span>}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 16px', color: C.textSecondary, fontSize: '12px' }}>
+                            {hw.date_assigned ? new Date(hw.date_assigned).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', color: C.textSecondary, fontSize: '12px' }}>
+                            {hw.due_date ? new Date(hw.due_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ fontWeight: 700, color: C.teal, fontSize: '14px' }}>{hw.total_submissions}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
+        {/* ── Exams ────────────────────────────────────────────────────────── */}
+        {activeTab === 'exam-correction' && (
+          <ExamCorrectionPanel data={teacherExamsData} loading={teacherExamsLoading} />
+        )}
+
+        {activeTab === 'mock-exams' && (
+          <MockExamResults
+            exams={mockExams ?? []}
+            loading={mockExamsLoading}
+            examClassOptions={mockExamClassOptions}
+            examSectionOptions={mockExamSectionOptions}
+            examClassFilter={mockExamClassFilter}
+            examSectionFilter={mockExamSectionFilter}
+            onExamFiltersChange={handleMockExamFiltersChange}
+            selectedHomeworkId={selectedMockExamId}
+            onSelectExam={handleSelectMockExam}
+            results={mockExamResults}
+            resultsLoading={mockExamResultsLoading}
+            onFetchExamsForSection={fetchMockExamsForSection}
+          />
+        )}
+
+        {/* ── Compare Mock Exams ───────────────────────────────────────────── */}
+        {activeTab === 'compare-mock-exams' && (
+          <CompareMockExams
+            exams={mockExams ?? []}
+            examClassOptions={mockExamClassOptions}
+            examSectionOptions={mockExamSectionOptions}
+            onFetchExamsForSection={fetchMockExamsForSection}
+            compareExamIds={compareExamIds}
+            compareResults={compareResults}
+            compareLoading={compareLoading}
+            onCompare={handleCompareExams}
+            onExitCompare={handleExitCompare}
+            teacherUsername={teacherUsername ?? ''}
+          />
+        )}
+
+        {/* ── Mock Exam Analysis ───────────────────────────────────────────── */}
+        {activeTab === 'mock-exam-analysis' && (
+          <MockExamAnalysis
+            exams={mockExams ?? []}
+            loading={mockExamsLoading}
+            selectedExamId={analysisExamId}
+            onSelectExam={handleSelectAnalysisExam}
+            examResults={analysisResults}
+            resultsLoading={analysisResultsLoading}
+            roster={dashboardData.students}
+            onRefreshExams={() => loadMockExams()}
+          />
+        )}
+
+        {/* ── Activity ─────────────────────────────────────────────────────── */}
+        {activeTab === 'activity' && (
+          activityLoading ? (
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                {[0, 1, 2].map((i) => <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: C.green, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />)}
+              </div>
+              <p style={{ margin: 0, fontSize: '14px', color: C.textMuted }}>Loading activity...</p>
+            </div>
+          ) : activityData ? <ActivityFeed data={activityData} /> : (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '14px' }}>No activity data available.</div>
+          )
+        )}
+
+        {/* ── Pre-Assessment ───────────────────────────────────────────────── */}
+        {activeTab === 'pre-assessment' && (
+            testPrepLoading ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: C.teal, animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                  ))}
+                </div>
+                <p style={{ margin: 0, fontSize: '14px', color: C.textMuted }}>Loading pre-assessment data...</p>
+              </div>
+            ) : (
+              <div>
+                {/* Filter bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between', padding: '16px 20px', background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, marginBottom: '16px', boxShadow: C.shadow }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Chapter</div>
+                      <select value={prepChapterFilter} onChange={(e) => setPrepChapterFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '160px' }}>
+                        {prepChapterOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Min Attempts</div>
+                      <select value={prepMinAttempts} onChange={(e) => setPrepMinAttempts(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontFamily: FONT, cursor: 'pointer' }}>
+                        {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}+</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Score Greater Than</div>
+                      <select value={prepMinScore} onChange={(e) => setPrepMinScore(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontFamily: FONT, cursor: 'pointer' }}>
+                        <option value={0}>Any score</option>
+                        {[40, 50, 60, 70, 80, 90].map((n) => <option key={n} value={n}>{n}%</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Class</div>
+                      <select value={prepClassFilter} onChange={(e) => { setPrepClassFilter(e.target.value); setPrepSectionFilter('All'); }} style={{ padding: '8px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '100px' }}>
+                        {prepClassOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Section</div>
+                      <select value={prepSectionFilter} onChange={(e) => setPrepSectionFilter(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: `1.5px solid ${C.border}`, background: C.card, color: C.text, fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '100px' }}>
+                        {prepSectionOptions.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', color: C.textSecondary }}>
+                        <span style={{ fontWeight: 700, color: C.teal, fontSize: '16px' }}>{prepFilteredStudents.length}</span> match
+                      </span>
+                      <button
+                        onClick={() => { setPrepChapterFilter('All'); setPrepClassFilter('All'); setPrepSectionFilter('All'); setPrepMinAttempts(1); setPrepMinScore(0); }}
+                        style={{ padding: '7px 14px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'transparent', color: C.textSecondary, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pre-Assessment Table */}
+                {prepFilteredStudents.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0', color: C.textMuted, fontSize: '14px' }}>No students match the selected filters.</div>
+                ) : (
+                  <div style={{ background: C.card, borderRadius: '14px', border: `1px solid ${C.border}`, overflow: 'hidden', boxShadow: C.shadow }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${C.border}`, background: C.cardAlt }}>
+                          {['Student', 'Class', 'Chapters', 'Attempts', 'Best Score', 'Avg Score', 'Last Attempt'].map((h) => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prepFilteredStudents.map((student, i) => {
+                          let items = testPrepByStudentId.get(student.student_id) ?? [];
+                          if (prepChapterFilter !== 'All') items = items.filter((item) => getItemChapters(item).includes(prepChapterFilter));
+                          const scores = items.map(getPrepItemScore);
+                          const bestScore = scores.length ? Math.max(...scores) : 0;
+                          const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+                          const chapters = [...new Set(items.flatMap(getItemChapters))];
+                          const lastAttempt = items.length
+                            ? items.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at
+                            : null;
+                          const classLabel = items[0]?.class_name ?? student.grade ?? '—';
+
+                          return (
+                            <tr key={student.student_id} style={{ borderBottom: i < prepFilteredStudents.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? 'transparent' : C.cardAlt }}>
+                              <td style={{ padding: '12px 16px' }}>
+                                <button onClick={() => setViewStudentId(student.student_id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                                  <div style={{ fontWeight: 600, color: C.text }}>{student.full_name}</div>
+                                  <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{student.section ?? ''}</div>
+                                </button>
+                              </td>
+                              <td style={{ padding: '12px 16px', color: C.textSecondary }}>{classLabel}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                  {chapters.slice(0, 3).map((ch) => (
+                                    <span key={ch} style={{ padding: '2px 8px', borderRadius: '99px', background: C.tealSoft, color: C.teal, fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{ch}</span>
+                                  ))}
+                                  {chapters.length > 3 && <span style={{ padding: '2px 8px', borderRadius: '99px', background: C.cardAlt, color: C.textMuted, fontSize: '11px' }}>+{chapters.length - 3}</span>}
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontWeight: 700, color: C.text }}>{items.length}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <span style={{ fontWeight: 700, color: scoreColor(bestScore), fontSize: '14px' }}>{bestScore}%</span>
+                              </td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ flex: 1, height: '5px', borderRadius: '99px', background: C.cardAlt, minWidth: '60px' }}>
+                                    <div style={{ width: `${avgScore}%`, height: '100%', borderRadius: '99px', background: scoreColor(avgScore) }} />
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: scoreColor(avgScore), minWidth: '32px' }}>{avgScore}%</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', color: C.textMuted, fontSize: '12px' }}>
+                                {lastAttempt ? new Date(lastAttempt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          )}
+
+        </div>{/* end page content */}
+      </div>{/* end main area */}
 
       {/* Modals */}
       {viewStudentId !== null && (

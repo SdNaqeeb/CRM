@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { dashboardAPI, alertAPI, activityAPI } from '../services/api';
-import { SchoolDashboardData, ActivityOverview, StudentEngagementSummary } from '../types';
+import { SchoolDashboardData, ActivityOverview, StudentEngagementSummary, TestPrepItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useDashboard } from '../context/DashboardContext';
 import MetricsCards from '../components/MetricsCards';
@@ -9,6 +9,7 @@ import SendAlertModal from '../components/SendAlertModal';
 import ActivityFeed from '../components/ActivityFeed';
 import StudentDetailModal from '../components/StudentDetailModal';
 import { SchoolAnalytics } from '../components/AnalyticsSections';
+import TimelineUpload from '../components/TimelineUpload';
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const FONT_SERIF = "'Source Serif 4', Georgia, serif";
@@ -23,9 +24,16 @@ const SchoolDashboard: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [viewStudentId, setViewStudentId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'students' | 'teachers' | 'activity'>('students');
+  const [activeTab, setActiveTab] = useState<'students' | 'teachers' | 'activity' | 'pre-assessment' | 'timeline'>('students');
   const [activityData, setActivityData] = useState<ActivityOverview | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [testPrepData, setTestPrepData] = useState<TestPrepItem[] | null>(null);
+  const [testPrepLoading, setTestPrepLoading] = useState(false);
+  const [prepChapterFilter, setPrepChapterFilter] = useState<string>('All');
+  const [prepClassFilter, setPrepClassFilter] = useState<string>('All');
+  const [prepSectionFilter, setPrepSectionFilter] = useState<string>('All');
+  const [prepMinAttempts, setPrepMinAttempts] = useState<number>(1);
+  const [prepMinScore, setPrepMinScore] = useState<number>(0);
   const [dayFilter, setDayFilter] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
@@ -85,6 +93,101 @@ const SchoolDashboard: React.FC = () => {
       setActivityLoading(false);
     }
   };
+
+  const loadTestPrep = async () => {
+    if (testPrepData || !schoolCode) return;
+    try {
+      setTestPrepLoading(true);
+      const result = await dashboardAPI.getTestPrepBySchoolCode(schoolCode);
+      setTestPrepData(result.items ?? []);
+    } catch (err) {
+      console.error('Failed to load test prep:', err);
+      setTestPrepData([]);
+    } finally {
+      setTestPrepLoading(false);
+    }
+  };
+
+  const testPrepByStudentId = useMemo(() => {
+    const map = new Map<number, TestPrepItem[]>();
+    if (!testPrepData) return map;
+    for (const item of testPrepData) {
+      if (!item.student_id) continue;
+      const list = map.get(item.student_id) ?? [];
+      list.push(item);
+      map.set(item.student_id, list);
+    }
+    return map;
+  }, [testPrepData]);
+
+  const getPrepItemScore = (item: TestPrepItem) =>
+    Number(item.graph_data?.score_pct ?? item.analysis?.analysis?.score_pct ?? item.analysis?.prediction?.score_pct ?? 0);
+
+  const getItemChapters = (item: TestPrepItem): string[] => {
+    const breakdown: any[] = item.graph_data?.chapter_breakdown ?? [];
+    if (breakdown.length > 0) {
+      const chapters = breakdown.map((e: any) => String(e.chapter || '')).filter(Boolean);
+      if (chapters.length > 0) return chapters;
+    }
+    const qChapters = (item.questions ?? [])
+      .map((q: any) => String(q.chapter || ''))
+      .filter(Boolean);
+    if (qChapters.length > 0) return [...new Set(qChapters)];
+    return [];
+  };
+
+  const prepChapterOptions = useMemo(() => {
+    if (!testPrepData) return ['All'];
+    const chapters = new Set<string>();
+    for (const item of testPrepData) {
+      for (const ch of getItemChapters(item)) chapters.add(ch);
+    }
+    return ['All', ...Array.from(chapters).sort((a, b) => a.localeCompare(b))];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testPrepData]);
+
+  const prepClassOptions = useMemo(() => {
+    if (!testPrepData) return ['All'];
+    const classes = new Set<string>();
+    for (const item of testPrepData) {
+      if (item.class_name) classes.add(String(item.class_name));
+    }
+    return ['All', ...Array.from(classes).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))];
+  }, [testPrepData]);
+
+  const prepSectionOptions = useMemo(() => {
+    if (!testPrepData) return ['All'];
+    const sections = new Set<string>();
+    for (const item of testPrepData) {
+      if (prepClassFilter !== 'All' && String(item.class_name) !== prepClassFilter) continue;
+      if (item.section_name) sections.add(String(item.section_name));
+    }
+    return ['All', ...Array.from(sections).sort()];
+  }, [testPrepData, prepClassFilter]);
+
+  const prepFilteredStudents = useMemo(() => {
+    if (!testPrepData || !schoolData) return [];
+    return schoolData.students.filter((student) => {
+      if (!student.student_id) return false;
+      let items = testPrepByStudentId.get(student.student_id) ?? [];
+      if (prepChapterFilter !== 'All') {
+        items = items.filter((item) => getItemChapters(item).includes(prepChapterFilter));
+      }
+      if (prepClassFilter !== 'All') {
+        items = items.filter((item) => String(item.class_name) === prepClassFilter);
+      }
+      if (prepSectionFilter !== 'All') {
+        items = items.filter((item) => String(item.section_name) === prepSectionFilter);
+      }
+      if (items.length < prepMinAttempts) return false;
+      if (prepMinScore > 0) {
+        const hasPassingScore = items.some((item) => getPrepItemScore(item) >= prepMinScore);
+        if (!hasPassingScore) return false;
+      }
+      return true;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testPrepData, schoolData, testPrepByStudentId, prepChapterFilter, prepClassFilter, prepSectionFilter, prepMinAttempts, prepMinScore]);
 
   useEffect(() => {
     if (!schoolCode) return;
@@ -162,22 +265,13 @@ const SchoolDashboard: React.FC = () => {
   const allUsers = [...schoolData.students, ...schoolData.teachers];
   const displayUsers = activeTab === 'students' ? filteredStudentsList : filteredTeachersList;
 
-  const ProgressBar: React.FC<{ label: string; value: number; total: number; color: string }> = ({ label, value, total, color }) => (
-    <div style={{ marginBottom: '14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
-        <span style={{ color: '#94A3B8', fontWeight: 500 }}>{label}</span>
-        <span style={{ fontWeight: 700, color }}>{value} / {total}</span>
-      </div>
-      <div style={{ width: '100%', height: '6px', borderRadius: '99px', background: '#1E293B' }}>
-        <div style={{ width: `${total > 0 ? (value / total) * 100 : 0}%`, height: '100%', borderRadius: '99px', background: color, transition: 'width 0.6s ease-out' }} />
-      </div>
-    </div>
-  );
 
   const tabs = [
     { key: 'students' as const, label: 'Students', count: filteredStudentsList.length, color: '#3B82F6' },
     // { key: 'teachers' as const, label: 'Teachers', count: filteredTeachersList.length, color: '#8B5CF6' },
+    { key: 'pre-assessment' as const, label: 'Spot Check', count: testPrepData ? prepFilteredStudents.length : null, color: '#8B5CF6' },
     { key: 'activity' as const, label: 'Activity', count: null, color: '#10B981' },
+    { key: 'timeline' as const, label: 'Timeline', count: null, color: '#A78BFA' },
   ];
 
   return (
@@ -242,7 +336,7 @@ const SchoolDashboard: React.FC = () => {
               {tabs.map((t) => (
                 <button
                   key={t.key}
-                  onClick={() => { setActiveTab(t.key); if (t.key === 'activity') loadActivity(); }}
+                  onClick={() => { setActiveTab(t.key); if (t.key === 'activity') loadActivity(); if (t.key === 'pre-assessment') loadTestPrep(); }}
                   style={{
                     padding: '7px 16px',
                     borderRadius: '99px',
@@ -267,7 +361,7 @@ const SchoolDashboard: React.FC = () => {
               )}
             </div>
 
-            {activeTab !== 'activity' && (
+            {activeTab !== 'activity' && activeTab !== 'pre-assessment' && (
               <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', marginRight: '4px', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Filter</span>
                 {dayFilterOptions.map((opt) => (
@@ -294,6 +388,145 @@ const SchoolDashboard: React.FC = () => {
             ) : (
               <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: '14px' }}>No activity data available.</div>
             )
+          ) : activeTab === 'pre-assessment' ? (
+            testPrepLoading ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#8B5CF6', animation: `dot-pulse 1.4s ease-in-out ${i * 0.16}s infinite` }} />
+                  ))}
+                </div>
+                <p style={{ margin: 0, fontSize: '14px', color: '#94A3B8' }}>Loading spot check data...</p>
+              </div>
+            ) : (
+              <div>
+                {/* Filter bar */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end', justifyContent: 'space-between', padding: '16px 20px', background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', marginBottom: '16px' }}>
+                  {/* Left: Chapter, Attempts, Score */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+                    {([
+                      { label: 'Chapter', value: prepChapterFilter, set: setPrepChapterFilter, options: prepChapterOptions, minWidth: '160px' },
+                    ] as any[]).map(({ label, value, set, options, minWidth }: any) => (
+                      <div key={label}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{label}</div>
+                        <select value={value} onChange={(e) => set(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth }}>
+                          {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Min Attempts</div>
+                      <select value={prepMinAttempts} onChange={(e) => setPrepMinAttempts(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer' }}>
+                        {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}+</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Score Greater Than</div>
+                      <select value={prepMinScore} onChange={(e) => setPrepMinScore(Number(e.target.value))} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer' }}>
+                        <option value={0}>Any score</option>
+                        {[40, 50, 60, 70, 80, 90].map((n) => <option key={n} value={n}>{n}%</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right: Class, Section + match count + reset */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+                    {([
+                      { label: 'Class', value: prepClassFilter, set: (v: string) => { setPrepClassFilter(v); setPrepSectionFilter('All'); }, options: prepClassOptions },
+                      { label: 'Section', value: prepSectionFilter, set: setPrepSectionFilter, options: prepSectionOptions },
+                    ] as any[]).map(({ label, value, set, options }: any) => (
+                      <div key={label}>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{label}</div>
+                        <select value={value} onChange={(e) => set(e.target.value)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #334155', background: '#0F172A', color: '#F1F5F9', fontSize: '13px', fontFamily: FONT, cursor: 'pointer', minWidth: '100px' }}>
+                          {options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '13px', color: '#94A3B8' }}>
+                        <span style={{ fontWeight: 700, color: '#8B5CF6', fontSize: '16px' }}>{prepFilteredStudents.length}</span> match
+                      </span>
+                      <button
+                        onClick={() => { setPrepChapterFilter('All'); setPrepClassFilter('All'); setPrepSectionFilter('All'); setPrepMinAttempts(1); setPrepMinScore(0); }}
+                        style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #334155', background: 'transparent', color: '#64748B', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pre-Assessment Results Table */}
+                {prepFilteredStudents.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: '14px' }}>No students match the selected filters.</div>
+                ) : (
+                  <div style={{ background: '#111827', borderRadius: '14px', border: '1px solid #1E293B', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', fontFamily: FONT }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #1E293B', background: '#0B1120' }}>
+                          {['Student', 'Class', 'Chapters', 'Attempts', 'Best Score', 'Avg Score', 'Last Attempt'].map((h) => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {prepFilteredStudents.map((student, i) => {
+                          let items = testPrepByStudentId.get(student.student_id) ?? [];
+                          if (prepChapterFilter !== 'All') {
+                            items = items.filter((item) => getItemChapters(item).includes(prepChapterFilter));
+                          }
+                          const scores = items.map((item) => getPrepItemScore(item));
+                          const bestScore = scores.length ? Math.max(...scores) : 0;
+                          const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+                          const chapters = [...new Set(items.flatMap((item) => getItemChapters(item)))];
+                          const lastAttempt = items.length ? items.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].created_at : null;
+                          const classLabel = items[0]?.class_name ?? student.grade ?? '—';
+
+                          const scoreColor = (s: number) => s >= 70 ? '#10B981' : s >= 50 ? '#F59E0B' : '#F43F5E';
+
+                          return (
+                            <tr key={student.student_id} style={{ borderBottom: i < prepFilteredStudents.length - 1 ? '1px solid #1E293B' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                              <td style={{ padding: '12px 16px' }}>
+                                <button onClick={() => setViewStudentId(student.student_id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                                  <div style={{ fontWeight: 600, color: '#F1F5F9' }}>{student.full_name}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{student.section ?? ''}</div>
+                                </button>
+                              </td>
+                              <td style={{ padding: '12px 16px', color: '#94A3B8' }}>{classLabel}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                  {chapters.slice(0, 3).map((ch) => (
+                                    <span key={ch} style={{ padding: '2px 8px', borderRadius: '99px', background: 'rgba(139,92,246,0.15)', color: '#A78BFA', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>{ch}</span>
+                                  ))}
+                                  {chapters.length > 3 && <span style={{ padding: '2px 8px', borderRadius: '99px', background: '#1E293B', color: '#64748B', fontSize: '11px' }}>+{chapters.length - 3}</span>}
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontWeight: 700, color: '#F1F5F9' }}>{items.length}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <span style={{ fontWeight: 700, color: scoreColor(bestScore), fontSize: '14px' }}>{bestScore}%</span>
+                              </td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ flex: 1, height: '5px', borderRadius: '99px', background: '#1E293B', minWidth: '60px' }}>
+                                    <div style={{ width: `${avgScore}%`, height: '100%', borderRadius: '99px', background: scoreColor(avgScore) }} />
+                                  </div>
+                                  <span style={{ fontWeight: 600, color: scoreColor(avgScore), minWidth: '32px' }}>{avgScore}%</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', color: '#64748B', fontSize: '12px' }}>
+                                {lastAttempt ? new Date(lastAttempt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          ) : activeTab === 'timeline' ? (
+            <TimelineUpload schoolCode={schoolCode} />
           ) : (
             <StudentTable
               students={displayUsers}
